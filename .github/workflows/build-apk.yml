@@ -144,17 +144,16 @@ jobs:
           name: maniflix-apk
           path: dist/ManiFlix.apk
 
-      - name: Publish GitHub Release v1.0.3
+      - name: Publish GitHub Release v1.0.4
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.3
-          name: ManiFlix Android v1.0.3
+          tag_name: v1.0.4
+          name: ManiFlix Android v1.0.4
           body: |
-            ManiFlix Native Android v1.0.3 (Build 4 • Tablet & Foldable/Duo Edition)
-            - Giao diện thích ứng cho Tablet & Màn hình gập/Duo với thanh điều hướng `NavigationRail` bên trái
-            - Bố cục chia 2 cột thông minh (`2-Pane Split`) trong Chi tiết phim tránh nếp gấp bản lề và tối ưu không gian
-            - Lưới poster tự động co giãn 4–6 cột theo độ rộng màn hình (Điện thoại / Màn gập / Tablet)
-            - Hỗ trợ đa cửa sổ (`resizeableActivity`) và xoay tự do trên màn hình lớn / Tablet
+            ManiFlix Native Android v1.0.4 (Build 5 • Settings Sub-Pages & Device Monitor)
+            - Tách mục Cài đặt gọn gàng với trang con **Giao diện & Chủ đề** (Taurus Live Mini-App Preview) và **Kiểm tra mạng & Thiết bị**
+            - Đo tốc độ mạng trực tiếp (`GET /api/net-stats`, `/api/net-probe`, `POST /api/net-up`) kèm biểu đồ thời gian thực và thông số phần cứng/codec
+            - Hỗ trợ Tablet `NavigationRail`, Foldable/Duo `2-Pane Split`, lưới thích ứng 4–6 cột và đa cửa sổ
             - `ManiFlix.apk`: Bản Universal đa kiến trúc (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) tương thích Android 7.0+
           files: dist/ManiFlix.apk
           overwrite_files: true

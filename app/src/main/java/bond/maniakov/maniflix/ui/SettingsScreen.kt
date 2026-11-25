@@ -1,5 +1,8 @@
 package bond.maniakov.maniflix.ui
 
+import android.app.ActivityManager
+import android.content.Context
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -7,8 +10,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,16 +22,14 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.NetworkCheck
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -43,46 +42,73 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import bond.maniakov.maniflix.data.AccentPreset
 import bond.maniakov.maniflix.data.AppPreferences
 import bond.maniakov.maniflix.data.AppState
 import bond.maniakov.maniflix.data.ExternalPlayerOption
 import bond.maniakov.maniflix.data.IntroSkipBehavior
 import bond.maniakov.maniflix.data.SoundProfileMode
-import bond.maniakov.maniflix.data.SurfaceStyle
-import bond.maniakov.maniflix.data.THEME_PRESETS
-import bond.maniakov.maniflix.data.ThemeMode
 import bond.maniakov.maniflix.data.UpdateManager
 import bond.maniakov.maniflix.player.PlayerSessionHolder
 import bond.maniakov.maniflix.player.SpatialAudioController
 import bond.maniakov.maniflix.ui.theme.ManiFlixColors
 import kotlinx.coroutines.launch
+import java.util.Locale
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalLayoutApi::class)
+private enum class SettingsSubPage {
+    MAIN,
+    THEME,
+    DEVICE_MONITOR
+}
+
 @Composable
 fun SettingsScreen(
     bottomContentPadding: Dp = 24.dp
 ) {
+    var subPage by rememberSaveable { mutableStateOf(SettingsSubPage.MAIN) }
+
+    BackHandler(enabled = subPage != SettingsSubPage.MAIN) {
+        subPage = SettingsSubPage.MAIN
+    }
+
+    when (subPage) {
+        SettingsSubPage.THEME -> {
+            ThemeSettingsScreen(
+                bottomContentPadding = bottomContentPadding,
+                onBack = { subPage = SettingsSubPage.MAIN }
+            )
+            return
+        }
+
+        SettingsSubPage.DEVICE_MONITOR -> {
+            DeviceMonitorScreen(
+                bottomContentPadding = bottomContentPadding,
+                onBack = { subPage = SettingsSubPage.MAIN }
+            )
+            return
+        }
+
+        SettingsSubPage.MAIN -> Unit
+    }
+
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
@@ -91,11 +117,17 @@ fun SettingsScreen(
     val textPrimary = ManiFlixColors.textPrimary()
     val textSecondary = ManiFlixColors.textSecondary()
     val borderColor = ManiFlixColors.cardBorder()
-    val isLight = ManiFlixColors.isLight()
 
     val audioOutputLabel = remember { SpatialAudioController.currentAudioOutputLabel(context) }
-    var customColorSlot by remember { mutableIntStateOf(0) } // 0 = Accent, 1 = Bg, 2 = Surface
-    var isSyncingTheme by remember { mutableStateOf(false) }
+    val ramSummary = remember {
+        runCatching {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            val mi = ActivityManager.MemoryInfo()
+            am?.getMemoryInfo(mi)
+            val totalGb = mi.totalMem / (1024.0 * 1024.0 * 1024.0)
+            String.format(Locale.US, "%.1f GB RAM • Live Probe", totalGb)
+        }.getOrDefault("Live Telemetry & Codec")
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -192,282 +224,44 @@ fun SettingsScreen(
             }
         }
 
-        // Giao diện
-        item(key = "sec_appearance") {
-            SettingsSection(title = "Giao diện", textSecondary = textSecondary) {
-                // Theme mode pills
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "Chế độ hiển thị",
-                        fontSize = 14.5.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = textPrimary
-                    )
-
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ThemeMode.entries.forEach { mode ->
-                            val selected = AppPreferences.themeMode == mode
-                            Box(
-                                modifier = appleGlassSurfaceModifier(
-                                    cornerRadius = 50.dp,
-                                    highlighted = selected
-                                )
-                                    .clickable {
-                                        AppPreferences.themeMode = mode
-                                        if (mode != ThemeMode.CUSTOM) {
-                                            AppPreferences.activePresetId = mode.name.lowercase()
-                                        }
-                                        triggerHaptic(haptic)
-                                    }
-                                    .padding(horizontal = 12.dp, vertical = 7.dp)
-                            ) {
-                                Text(
-                                    text = mode.title,
-                                    fontSize = 12.5.sp,
-                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (selected && isLight) accent else textPrimary,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                    }
-                }
-
-                SettingsDivider(borderColor)
-
-                // Curated Theme Presets
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "Bảng màu gợi ý",
-                        fontSize = 14.5.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = textPrimary,
-                        modifier = Modifier.padding(horizontal = 14.dp)
-                    )
-
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(THEME_PRESETS, key = { it.id }) { preset ->
-                            val active = AppPreferences.activePresetId == preset.id &&
-                                AppPreferences.themeMode == preset.mode
-                            Row(
-                                modifier = appleGlassSurfaceModifier(
-                                    cornerRadius = 12.dp,
-                                    highlighted = active
-                                )
-                                    .clickable {
-                                        AppPreferences.applyPreset(preset)
-                                        triggerHaptic(haptic)
-                                    }
-                                    .padding(horizontal = 11.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(7.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(16.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(preset.bgHex))
-                                        .border(2.5.dp, Color(preset.accentHex), CircleShape)
-                                )
-                                Text(
-                                    text = preset.name,
-                                    fontSize = 12.5.sp,
-                                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (active && isLight) accent else textPrimary,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                    }
-                }
-
-                SettingsDivider(borderColor)
-
-                // Accent swatches
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Màu chủ đạo",
-                        fontSize = 14.5.sp,
-                        color = textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                        AccentPreset.entries.forEach { preset ->
-                            val selected = AppPreferences.customAccentHex == preset.colorHex
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .scale(if (selected) 1.12f else 1f)
-                                    .clip(CircleShape)
-                                    .background(Color(preset.colorHex))
-                                    .then(
-                                        if (selected) {
-                                            Modifier.border(
-                                                2.2.dp,
-                                                if (isLight) Color(0xFF111114) else Color.White,
-                                                CircleShape
-                                            )
-                                        } else {
-                                            Modifier
-                                        }
-                                    )
-                                    .clickable {
-                                        AppPreferences.accentPreset = preset
-                                        triggerHaptic(haptic)
-                                    }
-                            )
-                        }
-                    }
-                }
-
-                // Custom Theme Editor when CUSTOM mode is active
-                if (AppPreferences.themeMode == ThemeMode.CUSTOM) {
-                    SettingsDivider(borderColor)
-                    CustomThemeEditor(
-                        selectedSlot = customColorSlot,
-                        onSelectSlot = { customColorSlot = it },
-                        accent = accent,
-                        textPrimary = textPrimary,
-                        textSecondary = textSecondary,
-                        borderColor = borderColor
-                    )
-                }
-
-                if (AppState.isLoggedIn) {
-                    SettingsDivider(borderColor)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                scope.launch {
-                                    isSyncingTheme = true
-                                    AppState.saveAndSyncTheme()
-                                    isSyncingTheme = false
-                                }
-                            },
-                            enabled = !isSyncingTheme,
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = accent),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(42.dp)
-                        ) {
-                            if (isSyncingTheme) {
-                                CircularProgressIndicator(
-                                    color = Color.White,
-                                    strokeWidth = 2.dp,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Rounded.Palette,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Lưu & đồng bộ giao diện",
-                                    color = Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                    }
-                }
-
-                SettingsDivider(borderColor)
-
-                SettingsDropdownRow(
-                    title = "Phong cách hiển thị",
-                    selectedLabel = AppPreferences.surfaceStyle.title,
-                    options = SurfaceStyle.entries,
-                    labelFor = { it.title },
+        // Drill-down sub-pages: Giao diện & Chủ đề + Kiểm tra mạng & Thiết bị
+        item(key = "sec_appearance_and_monitor") {
+            SettingsSection(title = "Giao diện & Hệ thống", textSecondary = textSecondary) {
+                SettingsDrillDownRow(
+                    icon = Icons.Rounded.Palette,
+                    iconTint = accent,
+                    title = "Giao diện & Chủ đề",
+                    subtitle = "${AppPreferences.themeMode.title} • ${AppPreferences.formatColorHex(AppPreferences.customAccentHex)}",
+                    trailingDotColor = accent,
                     textPrimary = textPrimary,
                     textSecondary = textSecondary,
-                    accent = accent,
-                    onSelect = {
-                        AppPreferences.surfaceStyle = it
-                        triggerHaptic(haptic)
-                    }
-                )
-
-                SettingsDivider(borderColor)
-
-                SettingsSwitchRow(
-                    title = "Ánh nền theo ảnh phim",
-                    checked = AppPreferences.ambientArtworkEnabled,
-                    accent = accent,
-                    textPrimary = textPrimary,
                     borderColor = borderColor,
-                    onCheckedChange = {
-                        AppPreferences.ambientArtworkEnabled = it
+                    onClick = {
                         triggerHaptic(haptic)
+                        subPage = SettingsSubPage.THEME
                     }
                 )
 
                 SettingsDivider(borderColor)
 
-                SettingsDropdownRow(
-                    title = "Số cột hiển thị",
-                    selectedLabel = "${AppPreferences.gridColumnsPhone} cột",
-                    options = listOf(2, 3),
-                    labelFor = { "$it cột" },
+                SettingsDrillDownRow(
+                    icon = Icons.Rounded.NetworkCheck,
+                    iconTint = Color(0xFF10B981),
+                    title = "Kiểm tra mạng & Thiết bị",
+                    subtitle = ramSummary,
+                    trailingDotColor = null,
                     textPrimary = textPrimary,
                     textSecondary = textSecondary,
-                    accent = accent,
-                    onSelect = {
-                        AppPreferences.gridColumnsPhone = it
-                        triggerHaptic(haptic)
-                    }
-                )
-
-                SettingsDivider(borderColor)
-
-                SettingsSwitchRow(
-                    title = "Rung phản hồi",
-                    checked = AppPreferences.hapticsEnabled,
-                    accent = accent,
-                    textPrimary = textPrimary,
                     borderColor = borderColor,
-                    onCheckedChange = {
-                        AppPreferences.hapticsEnabled = it
-                        if (it) triggerHaptic(haptic)
+                    onClick = {
+                        triggerHaptic(haptic)
+                        subPage = SettingsSubPage.DEVICE_MONITOR
                     }
                 )
             }
         }
 
-        // Âm thanh (Spatial removed cleanly on Android)
+        // Âm thanh (Zero Spatial Audio!)
         item(key = "sec_audio") {
             SettingsSection(title = "Âm thanh", textSecondary = textSecondary) {
                 SettingsInfoRow(
@@ -737,223 +531,82 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun CustomThemeEditor(
-    selectedSlot: Int,
-    onSelectSlot: (Int) -> Unit,
-    accent: Color,
-    textPrimary: Color,
-    textSecondary: Color,
-    borderColor: Color
-) {
-    val activeColorLong = when (selectedSlot) {
-        0 -> AppPreferences.customAccentHex
-        1 -> AppPreferences.customBgHex
-        else -> AppPreferences.customSurfaceHex
-    }
-
-    fun updateSlotColor(newHex: Long) {
-        AppPreferences.themeMode = ThemeMode.CUSTOM
-        AppPreferences.activePresetId = "custom"
-        when (selectedSlot) {
-            0 -> AppPreferences.customAccentHex = newHex
-            1 -> AppPreferences.customBgHex = newHex
-            else -> AppPreferences.customSurfaceHex = newHex
-        }
-    }
-
-    val quickPalette = when (selectedSlot) {
-        0 -> listOf(0xFFFA2D48, 0xFFFF6448, 0xFF0A84FF, 0xFF5E5CE6, 0xFF30D158, 0xFFFF375F, 0xFFFFD60A)
-        1 -> listOf(0xFF121214, 0xFF000000, 0xFF0B1020, 0xFF0B1612, 0xFF1B1224, 0xFFF4F4F7, 0xFFFFFFFF)
-        else -> listOf(0xFF1C1C1E, 0xFF141416, 0xFF151C32, 0xFF14241D, 0xFF281B35, 0xFFFFFFFF, 0xFFE9ECF2)
-    }
-
-    val red = ((activeColorLong shr 16) and 0xFF).toInt()
-    val green = ((activeColorLong shr 8) and 0xFF).toInt()
-    val blue = (activeColorLong and 0xFF).toInt()
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Tuỳ chỉnh màu",
-                fontSize = 14.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = textPrimary,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = AppPreferences.formatColorHex(activeColorLong),
-                fontSize = 12.sp,
-                fontFamily = FontFamily.Monospace,
-                color = textSecondary
-            )
-        }
-
-        // Slot tabs: Màu chủ đạo | Màu nền | Màu thẻ
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            listOf(
-                0 to "Chủ đạo",
-                1 to "Màu nền",
-                2 to "Màu thẻ"
-            ).forEach { (slotIdx, label) ->
-                val active = selectedSlot == slotIdx
-                val dotHex = when (slotIdx) {
-                    0 -> AppPreferences.customAccentHex
-                    1 -> AppPreferences.customBgHex
-                    else -> AppPreferences.customSurfaceHex
-                }
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .then(appleGlassSurfaceModifier(cornerRadius = 10.dp, highlighted = active))
-                        .clickable { onSelectSlot(slotIdx) }
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .clip(CircleShape)
-                            .background(Color(dotHex))
-                            .border(0.8.dp, borderColor, CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = label,
-                        fontSize = 12.sp,
-                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-                        color = textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-
-        // Quick pick swatches for active slot
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            quickPalette.forEach { hex ->
-                val selected = activeColorLong == hex
-                Box(
-                    modifier = Modifier
-                        .size(26.dp)
-                        .clip(CircleShape)
-                        .background(Color(hex))
-                        .border(
-                            width = if (selected) 2.2.dp else 0.8.dp,
-                            color = if (selected) accent else borderColor,
-                            shape = CircleShape
-                        )
-                        .clickable { updateSlotColor(hex) }
-                )
-            }
-        }
-
-        // RGB sliders
-        RgbChannelSlider(
-            label = "R",
-            value = red,
-            trackColor = Color(0xFFFF453A),
-            textPrimary = textPrimary,
-            textSecondary = textSecondary,
-            borderColor = borderColor,
-            onChange = { newR ->
-                val argb = 0xFF000000L or ((newR.toLong() and 0xFF) shl 16) or
-                    ((green.toLong() and 0xFF) shl 8) or (blue.toLong() and 0xFF)
-                updateSlotColor(argb)
-            }
-        )
-        RgbChannelSlider(
-            label = "G",
-            value = green,
-            trackColor = Color(0xFF30D158),
-            textPrimary = textPrimary,
-            textSecondary = textSecondary,
-            borderColor = borderColor,
-            onChange = { newG ->
-                val argb = 0xFF000000L or ((red.toLong() and 0xFF) shl 16) or
-                    ((newG.toLong() and 0xFF) shl 8) or (blue.toLong() and 0xFF)
-                updateSlotColor(argb)
-            }
-        )
-        RgbChannelSlider(
-            label = "B",
-            value = blue,
-            trackColor = Color(0xFF0A84FF),
-            textPrimary = textPrimary,
-            textSecondary = textSecondary,
-            borderColor = borderColor,
-            onChange = { newB ->
-                val argb = 0xFF000000L or ((red.toLong() and 0xFF) shl 16) or
-                    ((green.toLong() and 0xFF) shl 8) or (newB.toLong() and 0xFF)
-                updateSlotColor(argb)
-            }
-        )
-    }
-}
-
-@Composable
-private fun RgbChannelSlider(
-    label: String,
-    value: Int,
-    trackColor: Color,
+private fun SettingsDrillDownRow(
+    icon: ImageVector,
+    iconTint: Color,
+    title: String,
+    subtitle: String,
+    trailingDotColor: Color?,
     textPrimary: Color,
     textSecondary: Color,
     borderColor: Color,
-    onChange: (Int) -> Unit
+    onClick: () -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = textPrimary,
-            modifier = Modifier.width(16.dp)
-        )
-        Slider(
-            value = value.toFloat(),
-            onValueChange = { onChange(it.roundToInt().coerceIn(0, 255)) },
-            valueRange = 0f..255f,
-            colors = SliderDefaults.colors(
-                thumbColor = trackColor,
-                activeTrackColor = trackColor,
-                inactiveTrackColor = borderColor
-            ),
+        Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier
-                .weight(1f)
-                .height(28.dp)
-        )
-        Text(
-            text = value.toString().padStart(3, ' '),
-            fontSize = 11.5.sp,
-            fontFamily = FontFamily.Monospace,
-            color = textSecondary,
-            modifier = Modifier.width(28.dp)
+                .size(34.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(iconTint.copy(alpha = 0.16f))
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = title,
+                fontSize = 14.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = subtitle,
+                fontSize = 12.sp,
+                color = textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        if (trailingDotColor != null) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .clip(CircleShape)
+                    .background(trailingDotColor)
+                    .border(0.8.dp, borderColor, CircleShape)
+            )
+        }
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+            contentDescription = null,
+            tint = textSecondary,
+            modifier = Modifier.size(20.dp)
         )
     }
 }
 
 @Composable
-private fun SettingsMaxWidthContainer(
+internal fun SettingsMaxWidthContainer(
     content: @Composable () -> Unit
 ) {
     val isWide = LocalConfiguration.current.screenWidthDp >= 700
@@ -976,7 +629,7 @@ private fun SettingsMaxWidthContainer(
 }
 
 @Composable
-private fun SettingsSection(
+internal fun SettingsSection(
     title: String,
     textSecondary: Color,
     content: @Composable ColumnScope.() -> Unit
@@ -1002,7 +655,7 @@ private fun SettingsSection(
 }
 
 @Composable
-private fun SettingsDivider(borderColor: Color) {
+internal fun SettingsDivider(borderColor: Color) {
     HorizontalDivider(
         color = borderColor,
         modifier = Modifier.padding(start = 14.dp)
@@ -1010,7 +663,7 @@ private fun SettingsDivider(borderColor: Color) {
 }
 
 @Composable
-private fun SettingsInfoRow(
+internal fun SettingsInfoRow(
     title: String,
     value: String,
     textPrimary: Color,
@@ -1042,7 +695,7 @@ private fun SettingsInfoRow(
 }
 
 @Composable
-private fun SettingsSwitchRow(
+internal fun SettingsSwitchRow(
     title: String,
     checked: Boolean,
     accent: Color,
@@ -1081,7 +734,7 @@ private fun SettingsSwitchRow(
 }
 
 @Composable
-private fun <T> SettingsDropdownRow(
+internal fun <T> SettingsDropdownRow(
     title: String,
     selectedLabel: String,
     options: List<T>,
