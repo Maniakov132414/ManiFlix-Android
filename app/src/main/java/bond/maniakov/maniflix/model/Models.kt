@@ -13,7 +13,7 @@ object ImageUrlResolver {
         if (trimmed.startsWith("/")) {
             trimmed = trimmed.drop(1)
         }
-        if (trimmed.startsWith("uploads/")) {
+        if (trimmed.startsWith("upload/") || trimmed.startsWith("uploads/") || trimmed.contains("/")) {
             return "https://phimimg.com/$trimmed"
         }
         return "https://phimimg.com/upload/vod/$trimmed"

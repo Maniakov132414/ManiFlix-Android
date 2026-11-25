@@ -144,16 +144,16 @@ jobs:
           name: maniflix-apk
           path: dist/ManiFlix.apk
 
-      - name: Publish GitHub Release v1.0.4
+      - name: Publish GitHub Release v1.0.5
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.4
-          name: ManiFlix Android v1.0.4
+          tag_name: v1.0.5
+          name: ManiFlix Android v1.0.5
           body: |
-            ManiFlix Native Android v1.0.4 (Build 5 • Settings Sub-Pages & Device Monitor)
-            - Tách mục Cài đặt gọn gàng với trang con **Giao diện & Chủ đề** (Taurus Live Mini-App Preview) và **Kiểm tra mạng & Thiết bị**
-            - Đo tốc độ mạng trực tiếp (`GET /api/net-stats`, `/api/net-probe`, `POST /api/net-up`) kèm biểu đồ thời gian thực và thông số phần cứng/codec
-            - Hỗ trợ Tablet `NavigationRail`, Foldable/Duo `2-Pane Split`, lưới thích ứng 4–6 cột và đa cửa sổ
+            ManiFlix Native Android v1.0.5 (Build 6)
+            - Sửa lỗi đường dẫn ảnh `upload/vod/` giúp tải đầy đủ poster và banner phim từ PhimAPI
+            - Bổ sung fallback tự động sang `thumb_url` khi poster gốc lỗi tải
+            - Tối ưu icon vector Material đồng bộ, bỏ hoàn toàn emoji trên nút bấm
             - `ManiFlix.apk`: Bản Universal đa kiến trúc (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) tương thích Android 7.0+
           files: dist/ManiFlix.apk
           overwrite_files: true

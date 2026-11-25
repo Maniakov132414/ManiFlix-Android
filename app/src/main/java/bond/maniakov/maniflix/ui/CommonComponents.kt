@@ -214,13 +214,23 @@ fun MoviePosterCard(
                 .background(ManiFlixColors.surfaceElevated())
                 .border(0.6.dp, borderColor, cardShape)
         ) {
+            val primaryUrl = movie.displayPosterUrl.ifBlank { movie.displayThumbUrl }
+            val secondaryUrl = movie.displayThumbUrl.ifBlank { movie.displayPosterUrl }
+            var useFallbackUrl by remember(movie.slug) { mutableStateOf(false) }
+            val resolvedUrl = if (!useFallbackUrl) primaryUrl else secondaryUrl
+
             AsyncImage(
                 model = ImageRequest.Builder(context)
-                    .data(movie.displayPosterUrl.ifBlank { movie.displayThumbUrl })
+                    .data(resolvedUrl)
                     .crossfade(true)
                     .build(),
                 contentDescription = movie.name,
                 contentScale = ContentScale.Crop,
+                onError = {
+                    if (!useFallbackUrl && secondaryUrl.isNotBlank() && secondaryUrl != primaryUrl) {
+                        useFallbackUrl = true
+                    }
+                },
                 modifier = Modifier.fillMaxSize()
             )
 

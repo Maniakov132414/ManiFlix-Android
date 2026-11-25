@@ -611,13 +611,22 @@ private fun HeroFeaturedCard(
                 }
             )
     ) {
+        val heroPrimary = movie.displayThumbUrl.ifBlank { movie.displayPosterUrl }
+        val heroFallback = movie.displayPosterUrl.ifBlank { movie.displayThumbUrl }
+        var useHeroFallback by remember(movie.slug) { mutableStateOf(false) }
+
         AsyncImage(
             model = ImageRequest.Builder(context)
-                .data(movie.displayThumbUrl.ifBlank { movie.displayPosterUrl })
+                .data(if (!useHeroFallback) heroPrimary else heroFallback)
                 .crossfade(true)
                 .build(),
             contentDescription = movie.name,
             contentScale = ContentScale.Crop,
+            onError = {
+                if (!useHeroFallback && heroFallback.isNotBlank() && heroFallback != heroPrimary) {
+                    useHeroFallback = true
+                }
+            },
             modifier = Modifier.fillMaxSize()
         )
 
