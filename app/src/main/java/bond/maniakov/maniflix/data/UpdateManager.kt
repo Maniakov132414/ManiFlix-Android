@@ -9,8 +9,8 @@ import androidx.compose.runtime.setValue
 import bond.maniakov.maniflix.model.AndroidVersionConfig
 
 object UpdateManager {
-    const val currentVersion = "1.0.1"
-    const val currentBuild = "2"
+    const val currentVersion = "1.0.2"
+    const val currentBuild = "3"
     const val displayVersion = "$currentVersion ($currentBuild)"
 
     private const val PREFS_NAME = "maniflix_update"

@@ -396,11 +396,15 @@ fun DiscoverScreen(
                                             val active = pagerState.currentPage == index
                                             Box(
                                                 modifier = Modifier
-                                                    .size(if (active) 7.dp else 5.dp)
+                                                    .width(if (active) 18.dp else 6.dp)
+                                                    .height(6.dp)
                                                     .clip(CircleShape)
                                                     .background(
                                                         if (active) accent else textSecondary.copy(alpha = 0.35f)
                                                     )
+                                                    .clickable {
+                                                        scope.launch { pagerState.animateScrollToPage(index) }
+                                                    }
                                             )
                                         }
                                     }
