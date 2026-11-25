@@ -1,0 +1,465 @@
+package bond.maniakov.maniflix
+
+import android.app.PictureInPictureParams
+import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.Color as AndroidColor
+import android.os.Build
+import android.os.Bundle
+import android.util.Rational
+import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Bookmarks
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.VideoLibrary
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import bond.maniakov.maniflix.data.AppPreferences
+import bond.maniakov.maniflix.data.AppState
+import bond.maniakov.maniflix.data.UpdateManager
+import bond.maniakov.maniflix.model.MovieItem
+import bond.maniakov.maniflix.player.ManiFlixPlayerScreen
+import bond.maniakov.maniflix.player.OrientationHelper
+import bond.maniakov.maniflix.player.PlayerEngine
+import bond.maniakov.maniflix.player.PlayerSessionHolder
+import bond.maniakov.maniflix.ui.AuthSheetDialog
+import bond.maniakov.maniflix.ui.DiscoverScreen
+import bond.maniakov.maniflix.ui.LibraryScreen
+import bond.maniakov.maniflix.ui.MovieDetailScreen
+import bond.maniakov.maniflix.ui.SearchScreen
+import bond.maniakov.maniflix.ui.SettingsScreen
+import bond.maniakov.maniflix.ui.UpdatePromptDialog
+import bond.maniakov.maniflix.ui.appleGlassSurfaceModifier
+import bond.maniakov.maniflix.ui.theme.ManiFlixColors
+import bond.maniakov.maniflix.ui.theme.ManiFlixTheme
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+
+class MainActivity : ComponentActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+        )
+        super.onCreate(savedInstanceState)
+
+        AppPreferences.init(applicationContext)
+        AppState.init(applicationContext)
+        AppState.onLaunchInternalPlayer = { ctx, movie, servers, serverIdx, episodeIdx, resumeSec ->
+            PlayerSessionHolder.open(ctx, movie, servers, serverIdx, episodeIdx, resumeSec)
+        }
+
+        handleDeepLink(intent)
+
+        setContent {
+            ManiFlixTheme {
+                RootScaffold(
+                    onEnterPiP = { enterPiPMode() },
+                    onClosePlayer = { closeInternalPlayer() }
+                )
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleDeepLink(intent)
+    }
+
+    private fun handleDeepLink(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (data.scheme == "maniflix" && data.host == "movie") {
+            val slug = data.pathSegments.firstOrNull { it.isNotBlank() }
+                ?: data.lastPathSegment?.takeIf { it.isNotBlank() && it != "movie" }
+            if (!slug.isNullOrBlank()) {
+                AppState.deepLinkSlug = slug
+            }
+        }
+    }
+
+    fun enterPiPMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val params = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(16, 9))
+                .build()
+            enterPictureInPictureMode(params)
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (
+            AppState.isPlayerPresented &&
+            AppPreferences.autoPiP &&
+            PlayerSessionHolder.activeEngine != null
+        ) {
+            enterPiPMode()
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        PlayerSessionHolder.isInPiPMode = isInPictureInPictureMode
+    }
+
+    private fun closeInternalPlayer() {
+        AppState.isPlayerPresented = false
+        PlayerSessionHolder.activeEngine?.shutdown()
+        PlayerSessionHolder.stopCompletely()
+        OrientationHelper.forcePortrait(this)
+    }
+}
+
+private enum class MainTab(
+    val label: String,
+    val icon: ImageVector
+) {
+    DISCOVER("Trang chủ", Icons.Rounded.VideoLibrary),
+    SEARCH("Tìm kiếm", Icons.Rounded.Search),
+    LIBRARY("Tủ phim", Icons.Rounded.Bookmarks),
+    SETTINGS("Cài đặt", Icons.Rounded.Settings)
+}
+
+private data class DetailNavEntry(
+    val slug: String,
+    val seedMovie: MovieItem?
+)
+
+@Composable
+private fun RootScaffold(
+    onEnterPiP: () -> Unit,
+    onClosePlayer: () -> Unit
+) {
+    var selectedTab by rememberSaveable { mutableStateOf(MainTab.DISCOVER) }
+    val detailStack = remember { mutableStateListOf<DetailNavEntry>() }
+
+    LaunchedEffect(Unit) {
+        AppState.bootstrapSession()
+        UpdateManager.checkForUpdates(manual = false)
+    }
+
+    val incomingDeepLink = AppState.deepLinkSlug
+    LaunchedEffect(incomingDeepLink) {
+        if (!incomingDeepLink.isNullOrBlank()) {
+            if (detailStack.lastOrNull()?.slug != incomingDeepLink) {
+                detailStack.add(DetailNavEntry(incomingDeepLink, null))
+            }
+            AppState.deepLinkSlug = null
+        }
+    }
+
+    val activeEngine = PlayerSessionHolder.activeEngine
+    val isPlayerOverlayVisible = AppState.isPlayerPresented && activeEngine != null
+    val isPiP = PlayerSessionHolder.isInPiPMode
+    val showMiniPlayer = activeEngine != null && !AppState.isPlayerPresented && !isPiP
+
+    BackHandler(enabled = !isPlayerOverlayVisible && detailStack.isNotEmpty()) {
+        detailStack.removeAt(detailStack.lastIndex)
+    }
+
+    val oled = AppPreferences.oledBlackEnabled
+    val accent = ManiFlixColors.accent()
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(ManiFlixColors.background(oled))
+    ) {
+        Scaffold(
+            containerColor = ManiFlixColors.background(oled),
+            bottomBar = {
+                if (!isPlayerOverlayVisible && !isPiP) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        if (showMiniPlayer && activeEngine != null) {
+                            MiniPlayerBar(
+                                engine = activeEngine,
+                                onExpand = { AppState.isPlayerPresented = true },
+                                onClose = onClosePlayer,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+
+                        NavigationBar(
+                            containerColor = ManiFlixColors.surface(oled).copy(alpha = 0.96f),
+                            tonalElevation = 0.dp
+                        ) {
+                            MainTab.entries.forEach { tab ->
+                                val selected = selectedTab == tab
+                                NavigationBarItem(
+                                    selected = selected,
+                                    onClick = {
+                                        if (selectedTab == tab) {
+                                            detailStack.clear()
+                                        } else {
+                                            selectedTab = tab
+                                            detailStack.clear()
+                                        }
+                                    },
+                                    icon = {
+                                        Icon(
+                                            imageVector = tab.icon,
+                                            contentDescription = tab.label
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = tab.label,
+                                            fontSize = 11.sp,
+                                            maxLines = 1
+                                        )
+                                    },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = accent,
+                                        selectedTextColor = accent,
+                                        indicatorColor = accent.copy(alpha = 0.16f),
+                                        unselectedIconColor = Color(0xFF8E8E93),
+                                        unselectedTextColor = Color(0xFF8E8E93)
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        ) { innerPadding ->
+            val bottomPadding = innerPadding.calculateBottomPadding() + 12.dp
+            val currentDetail = detailStack.lastOrNull()
+            if (currentDetail != null) {
+                MovieDetailScreen(
+                    slug = currentDetail.slug,
+                    seedMovie = currentDetail.seedMovie,
+                    bottomContentPadding = bottomPadding,
+                    onBack = {
+                        if (detailStack.isNotEmpty()) {
+                            detailStack.removeAt(detailStack.lastIndex)
+                        }
+                    },
+                    onSelectMovie = { slug, seed ->
+                        detailStack.add(DetailNavEntry(slug, seed))
+                    }
+                )
+            } else {
+                when (selectedTab) {
+                    MainTab.DISCOVER -> DiscoverScreen(
+                        bottomContentPadding = bottomPadding,
+                        onMovieClick = { slug, seed ->
+                            detailStack.add(DetailNavEntry(slug, seed))
+                        }
+                    )
+
+                    MainTab.SEARCH -> SearchScreen(
+                        bottomContentPadding = bottomPadding,
+                        onMovieClick = { slug, seed ->
+                            detailStack.add(DetailNavEntry(slug, seed))
+                        }
+                    )
+
+                    MainTab.LIBRARY -> LibraryScreen(
+                        bottomContentPadding = bottomPadding,
+                        onMovieClick = { slug, seed ->
+                            detailStack.add(DetailNavEntry(slug, seed))
+                        }
+                    )
+
+                    MainTab.SETTINGS -> SettingsScreen(
+                        bottomContentPadding = bottomPadding
+                    )
+                }
+            }
+        }
+
+        if (isPlayerOverlayVisible && activeEngine != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
+                ManiFlixPlayerScreen(
+                    engine = activeEngine,
+                    isInPiP = isPiP,
+                    onEnterPiP = onEnterPiP,
+                    onClose = onClosePlayer
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = !AppState.globalBannerMessage.isNullOrBlank() && !isPiP,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 10.dp, start = 20.dp, end = 20.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(Color(0xE6222226))
+                    .border(0.6.dp, Color.White.copy(alpha = 0.16f), CircleShape)
+                    .padding(horizontal = 16.dp, vertical = 9.dp)
+            ) {
+                Text(
+                    text = AppState.globalBannerMessage.orEmpty(),
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        if (AppState.showAuthSheet) {
+            AuthSheetDialog(
+                onDismiss = { AppState.showAuthSheet = false }
+            )
+        }
+
+        if (UpdateManager.showForceBlocker) {
+            UpdatePromptDialog(
+                isForced = true,
+                onDismiss = {}
+            )
+        } else if (UpdateManager.showSoftPrompt) {
+            UpdatePromptDialog(
+                isForced = false,
+                onDismiss = { UpdateManager.snoozeSoftUpdateFor24Hours() }
+            )
+        }
+    }
+}
+
+@Composable
+private fun MiniPlayerBar(
+    engine: PlayerEngine,
+    onExpand: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+
+    Row(
+        modifier = modifier
+            .then(appleGlassSurfaceModifier(cornerRadius = 16.dp))
+            .clickable { onExpand() }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(engine.movie.displayPosterUrl.ifBlank { engine.movie.displayThumbUrl })
+                .crossfade(true)
+                .build(),
+            contentDescription = engine.movie.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.White.copy(alpha = 0.08f))
+        )
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = engine.movie.name,
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = engine.currentEpisode?.name?.takeIf { it.isNotBlank() } ?: "Đang phát",
+                fontSize = 11.5.sp,
+                color = Color(0xFFA0A0A8),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        IconButton(
+            onClick = { engine.togglePlayPause() },
+            modifier = Modifier.size(34.dp)
+        ) {
+            Icon(
+                imageVector = if (engine.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                contentDescription = if (engine.isPlaying) "Tạm dừng" else "Phát",
+                tint = Color.White
+            )
+        }
+
+        IconButton(
+            onClick = onClose,
+            modifier = Modifier.size(30.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Close,
+                contentDescription = "Đóng trình phát",
+                tint = Color(0xFFB4B4BC),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}

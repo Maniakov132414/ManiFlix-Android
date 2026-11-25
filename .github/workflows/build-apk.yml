@@ -1,0 +1,158 @@
+name: Build & Release ManiFlix Android APKs
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 35 & Build Tools
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Generate deterministic release keystore
+        run: |
+          mkdir -p /tmp/keystore
+          keytool -genkeypair -v \
+            -keystore /tmp/keystore/maniflix-release.jks \
+            -alias maniflix \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass "ManiFlixRelease2026!" \
+            -keypass "ManiFlixRelease2026!" \
+            -dname "CN=Maniakov, OU=ManiFlix, O=Maniakov, L=HoChiMinh, ST=HCM, C=VN"
+
+      - name: Build release APKs with Gradle
+        env:
+          KEYSTORE_PATH: /tmp/keystore/maniflix-release.jks
+          KEYSTORE_PASSWORD: ManiFlixRelease2026!
+          KEY_ALIAS: maniflix
+          KEY_PASSWORD: ManiFlixRelease2026!
+        run: |
+          gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Align, sign (v1+v2+v3), and package APKs into dist/
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          ZIPALIGN="$BUILD_TOOLS/zipalign"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          APK_DIR="app/build/outputs/apk/release"
+
+          mkdir -p dist /tmp/aligned
+
+          sign_apk() {
+            local pattern="$1"
+            local out_name="$2"
+            local src
+            src=$(find "$APK_DIR" -maxdepth 1 -name "$pattern" | head -n 1)
+            if [ -z "$src" ]; then
+              echo "ERROR: Could not find APK matching $pattern in $APK_DIR"
+              ls -la "$APK_DIR"
+              exit 1
+            fi
+            echo "Found $src -> dist/$out_name"
+            local aligned="/tmp/aligned/$out_name"
+            if "$ZIPALIGN" -c -p 4 "$src" >/dev/null 2>&1; then
+              cp "$src" "$aligned"
+            else
+              "$ZIPALIGN" -f -p 4 "$src" "$aligned"
+            fi
+            "$APKSIGNER" sign \
+              --ks /tmp/keystore/maniflix-release.jks \
+              --ks-key-alias maniflix \
+              --ks-pass pass:"ManiFlixRelease2026!" \
+              --key-pass pass:"ManiFlixRelease2026!" \
+              --v1-signing-enabled true \
+              --v2-signing-enabled true \
+              --v3-signing-enabled true \
+              --out "dist/$out_name" \
+              "$aligned"
+          }
+
+          sign_apk "app-arm64-v8a-release*.apk" "ManiFlix-arm64.apk"
+          sign_apk "app-armeabi-v7a-release*.apk" "ManiFlix-armeabi-v7a.apk"
+          sign_apk "app-universal-release*.apk" "ManiFlix-Universal.apk"
+          cp "dist/ManiFlix-arm64.apk" "dist/ManiFlix.apk"
+          ls -lh dist/
+
+      - name: Verify APKs with apksigner and Python inspector
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+
+          for apk in dist/*.apk; do
+            echo "=== apksigner verify: $apk ==="
+            "$APKSIGNER" verify --verbose "$apk"
+          done
+
+          python3 - << 'PY'
+          import pathlib
+          import zipfile
+
+          apks = sorted(pathlib.Path("dist").glob("*.apk"))
+          assert len(apks) == 4, f"Expected 4 APKs, got {len(apks)}"
+
+          for apk in apks:
+              raw = apk.read_bytes()
+              assert b"APK Sig Block 42" in raw, f"{apk.name}: missing APK Signature Scheme v2/v3 block"
+              with zipfile.ZipFile(apk, "r") as zf:
+                  bad = zf.testzip()
+                  assert bad is None, f"{apk.name}: corrupt ZIP entry {bad}"
+                  names = zf.namelist()
+                  assert "AndroidManifest.xml" in names, f"{apk.name}: missing AndroidManifest.xml"
+                  dex_files = [n for n in names if n.startswith("classes") and n.endswith(".dex")]
+                  assert dex_files, f"{apk.name}: missing classes.dex"
+                  rsa_files = [n for n in names if n.startswith("META-INF/") and n.endswith((".RSA", ".DSA", ".EC"))]
+                  assert rsa_files, f"{apk.name}: missing v1 signature certificate in META-INF"
+                  print(
+                      f"PASS {apk.name}: size={len(raw)/1024/1024:.2f}MB "
+                      f"dex={len(dex_files)} v1={rsa_files[0]} v2/v3=True"
+                  )
+          PY
+
+      - name: Upload APK build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: maniflix-apks
+          path: dist/*.apk
+
+      - name: Publish GitHub Release v1.0.0
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: ManiFlix Android v1.0.0
+          body: |
+            ManiFlix Native Android v1.0.0 (Jetpack Compose + Media3 HLS)
+            - `ManiFlix.apk` / `ManiFlix-arm64.apk`: 64-bit ARM (khuyên dùng cho hầu hết máy Android hiện đại)
+            - `ManiFlix-Universal.apk`: Hỗ trợ mọi kiến trúc CPU
+            - `ManiFlix-armeabi-v7a.apk`: 32-bit ARM cho máy Android đời cũ
+          files: dist/*.apk
+          make_latest: true

@@ -1,0 +1,3 @@
+-keep class bond.maniakov.maniflix.model.** { *; }
+-keep class bond.maniakov.maniflix.data.** { *; }
+-dontwarn org.json.**
