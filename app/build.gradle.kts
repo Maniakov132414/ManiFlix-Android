@@ -52,8 +52,8 @@ android {
         applicationId = "bond.maniakov.maniflix"
         minSdk = 24
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.0.5"
+        versionCode = 7
+        versionName = "1.0.6"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -136,6 +136,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.4.1")

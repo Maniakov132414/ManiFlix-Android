@@ -16,7 +16,16 @@ import bond.maniakov.maniflix.model.MovieTag
 import bond.maniakov.maniflix.model.UserInfo
 import bond.maniakov.maniflix.model.UserThemeConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import okhttp3.ConnectionPool
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okio.Buffer
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -25,13 +34,198 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 class ApiHttpException(val statusCode: Int, override val message: String) : Exception(message)
+
+data class SpeedtestPingResult(
+    val pingMs: Int,
+    val jitterMs: Int
+)
 
 object ManiFlixApi {
     private const val CONNECT_TIMEOUT_MS = 18_000
     private const val READ_TIMEOUT_MS = 18_000
-    private const val USER_AGENT = "ManiFlix-Android/1.0.0"
+    private const val USER_AGENT = "ManiFlix-Android/1.0.6"
+
+    private const val CF_PING_URL = "https://speed.cloudflare.com/__down?bytes=0"
+    private const val CF_DOWN_5MB_URL = "https://speed.cloudflare.com/__down?bytes=5000000"
+    private const val CF_DOWN_1MB_URL = "https://speed.cloudflare.com/__down?bytes=1000000"
+    private const val CF_UP_URL = "https://speed.cloudflare.com/__up"
+
+    private val speedtestClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectionPool(ConnectionPool(8, 2, TimeUnit.MINUTES))
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
+
+    suspend fun measureSpeedtestPingAndJitter(
+        samples: Int = 4,
+        includeWarmup: Boolean = true
+    ): SpeedtestPingResult? = withContext(Dispatchers.IO) {
+        fun probeUrl(targetUrl: String): List<Int> {
+            if (includeWarmup) {
+                runCatching {
+                    val warmReq = Request.Builder()
+                        .url(targetUrl)
+                        .header("Cache-Control", "no-store")
+                        .header("User-Agent", USER_AGENT)
+                        .get()
+                        .build()
+                    speedtestClient.newCall(warmReq).execute().use { resp ->
+                        resp.body?.source()?.readByteString()
+                    }
+                }
+            }
+            val list = ArrayList<Int>(samples.coerceAtLeast(1))
+            repeat(samples.coerceAtLeast(1)) {
+                runCatching {
+                    val req = Request.Builder()
+                        .url(targetUrl)
+                        .header("Cache-Control", "no-store")
+                        .header("User-Agent", USER_AGENT)
+                        .get()
+                        .build()
+                    val t0 = System.nanoTime()
+                    speedtestClient.newCall(req).execute().use { resp ->
+                        if (resp.isSuccessful) {
+                            resp.body?.source()?.readByteString()
+                            val dtMs = ((System.nanoTime() - t0) / 1_000_000L).toInt().coerceAtLeast(1)
+                            list.add(dtMs)
+                        }
+                    }
+                }
+            }
+            return list
+        }
+
+        var pings = probeUrl(CF_PING_URL)
+        if (pings.isEmpty()) {
+            pings = probeUrl("${AppPreferences.BASE_URL}/api/net-probe?kb=1")
+        }
+        if (pings.isEmpty()) return@withContext null
+
+        val avgPing = (pings.sum().toDouble() / pings.size).roundToInt().coerceAtLeast(1)
+        val jitter = if (pings.size >= 2) {
+            var diffSum = 0
+            for (i in 1 until pings.size) {
+                diffSum += abs(pings[i] - pings[i - 1])
+            }
+            diffSum / (pings.size - 1)
+        } else {
+            0
+        }
+        SpeedtestPingResult(pingMs = avgPing, jitterMs = jitter)
+    }
+
+    suspend fun measureSpeedtestDownloadMbps(
+        streams: Int = 4,
+        bytesPerStream: Long = 5_000_000L,
+        fallbackKb: Int = 2048
+    ): Double {
+        val cfUrl = when (bytesPerStream) {
+            5_000_000L -> CF_DOWN_5MB_URL
+            1_000_000L -> CF_DOWN_1MB_URL
+            else -> "https://speed.cloudflare.com/__down?bytes=$bytesPerStream"
+        }
+        val cfMbps = runParallelDownloadOkHttp(cfUrl, streams)
+        if (cfMbps > 0.0) return cfMbps
+
+        return runParallelDownloadOkHttp(
+            "${AppPreferences.BASE_URL}/api/net-probe?kb=$fallbackKb",
+            streams
+        )
+    }
+
+    private suspend fun runParallelDownloadOkHttp(url: String, streams: Int): Double = coroutineScope {
+        val count = streams.coerceAtLeast(1)
+        val results = (0 until count).map {
+            async(Dispatchers.IO) {
+                runCatching {
+                    val req = Request.Builder()
+                        .url(url)
+                        .header("Cache-Control", "no-store")
+                        .header("User-Agent", USER_AGENT)
+                        .get()
+                        .build()
+                    speedtestClient.newCall(req).execute().use { resp ->
+                        if (!resp.isSuccessful) return@runCatching null
+                        val body = resp.body ?: return@runCatching null
+                        val source = body.source()
+                        val buffer = Buffer()
+                        val tStart = System.nanoTime()
+                        var totalBytes = 0L
+                        while (true) {
+                            val read = source.read(buffer, 65_536L)
+                            if (read == -1L) break
+                            totalBytes += read
+                            buffer.clear()
+                        }
+                        val tEnd = System.nanoTime()
+                        if (totalBytes <= 0L) null else Triple(tStart, tEnd, totalBytes)
+                    }
+                }.getOrNull()
+            }
+        }.awaitAll().filterNotNull()
+
+        if (results.isEmpty()) return@coroutineScope 0.0
+        val totalBytes = results.sumOf { it.third }
+        if (totalBytes <= 0L) return@coroutineScope 0.0
+        val minStart = results.minOf { it.first }
+        val maxEnd = results.maxOf { it.second }
+        val maxStreamNs = results.maxOf { it.second - it.first }
+        val dtSec = max(0.005, max(maxEnd - minStart, maxStreamNs) / 1_000_000_000.0)
+        (totalBytes * 8.0) / dtSec / 1_000_000.0
+    }
+
+    suspend fun measureSpeedtestUploadMbps(streams: Int = 2): Double {
+        val cfMbps = runParallelUploadOkHttp(CF_UP_URL, payloadBytes = 1_000_000, streams = streams)
+        if (cfMbps > 0.0) return cfMbps
+        return runParallelUploadOkHttp(
+            "${AppPreferences.BASE_URL}/api/net-up",
+            payloadBytes = 512 * 1024,
+            streams = streams
+        )
+    }
+
+    private suspend fun runParallelUploadOkHttp(
+        url: String,
+        payloadBytes: Int,
+        streams: Int
+    ): Double = coroutineScope {
+        val count = streams.coerceAtLeast(1)
+        val payload = ByteArray(payloadBytes) { idx -> ((idx * 29) and 0xFF).toByte() }
+        val mediaType = "application/octet-stream".toMediaType()
+        val t0 = System.nanoTime()
+        val uploadedList = (0 until count).map {
+            async(Dispatchers.IO) {
+                runCatching {
+                    val req = Request.Builder()
+                        .url(url)
+                        .header("Cache-Control", "no-store")
+                        .header("User-Agent", USER_AGENT)
+                        .post(payload.toRequestBody(mediaType))
+                        .build()
+                    speedtestClient.newCall(req).execute().use { resp ->
+                        if (!resp.isSuccessful) return@runCatching 0L
+                        resp.body?.source()?.readByteString()
+                        payloadBytes.toLong()
+                    }
+                }.getOrDefault(0L)
+            }
+        }.awaitAll()
+        val totalUploaded = uploadedList.sum()
+        if (totalUploaded <= 0L) return@coroutineScope 0.0
+        val dtSec = max(0.005, (System.nanoTime() - t0) / 1_000_000_000.0)
+        (totalUploaded * 8.0) / dtSec / 1_000_000.0
+    }
 
     fun cleanM3u8Url(rawM3u8: String): String {
         val trimmed = rawM3u8.trim()

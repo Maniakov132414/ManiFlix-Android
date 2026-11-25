@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import bond.maniakov.maniflix.data.AppPreferences
+import bond.maniakov.maniflix.data.ManiFlixApi
 import bond.maniakov.maniflix.player.SpatialAudioController
 import bond.maniakov.maniflix.ui.theme.ManiFlixColors
 import kotlinx.coroutines.Dispatchers
@@ -84,7 +85,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
@@ -155,7 +155,7 @@ fun DeviceMonitorScreen(
     val borderColor = ManiFlixColors.cardBorder()
     val isWideScreen = LocalConfiguration.current.screenWidthDp >= 700
 
-    var liveProbeEnabled by remember { mutableStateOf(true) }
+    var liveProbeEnabled by remember { mutableStateOf(false) }
     var isManualTesting by remember { mutableStateOf(false) }
 
     val userSeries = remember { mutableStateListOf<UserNetSample>() }
@@ -171,28 +171,9 @@ fun DeviceMonitorScreen(
 
     var hardware by remember { mutableStateOf(readAndroidHardwareTelemetry(context)) }
 
-    suspend fun performTick(downKb: Int, upKb: Int, runSpeedProbe: Boolean) {
+    suspend fun refreshServerTelemetry() {
         hardware = withContext(Dispatchers.Default) { readAndroidHardwareTelemetry(context) }
-
-        val statsResult = withContext(Dispatchers.IO) { fetchServerStatsTimed() }
-        val pingMs = statsResult.first
-        val snapshot = statsResult.second
-
-        if (pingMs > 0) {
-            currentPingMs = pingMs
-            pingHistory.add(pingMs)
-            if (pingHistory.size > 20) pingHistory.removeAt(0)
-            currentJitterMs = if (pingHistory.size >= 2) {
-                var diffSum = 0
-                for (i in 1 until pingHistory.size) {
-                    diffSum += abs(pingHistory[i] - pingHistory[i - 1])
-                }
-                diffSum / (pingHistory.size - 1)
-            } else {
-                0
-            }
-        }
-
+        val snapshot = withContext(Dispatchers.IO) { fetchServerStatsSnapshot() }
         if (snapshot != null) {
             serverOnline = true
             srvSnapshot = snapshot
@@ -211,10 +192,39 @@ fun DeviceMonitorScreen(
         } else {
             serverOnline = false
         }
+    }
 
-        if (runSpeedProbe) {
-            val downMbps = withContext(Dispatchers.IO) { measureDownloadProbeMbps(downKb) }
-            val upMbps = withContext(Dispatchers.IO) { measureUploadProbeMbps(upKb) }
+    fun recordPingSample(pingMs: Int, jitterOverride: Int?) {
+        if (pingMs <= 0) return
+        currentPingMs = pingMs
+        pingHistory.add(pingMs)
+        if (pingHistory.size > 20) pingHistory.removeAt(0)
+        currentJitterMs = jitterOverride ?: if (pingHistory.size >= 2) {
+            var diffSum = 0
+            for (i in 1 until pingHistory.size) {
+                diffSum += abs(pingHistory[i] - pingHistory[i - 1])
+            }
+            diffSum / (pingHistory.size - 1)
+        } else {
+            0
+        }
+    }
+
+    suspend fun runFullSpeedtest() {
+        if (isManualTesting) return
+        isManualTesting = true
+        try {
+            refreshServerTelemetry()
+            val pingRes = ManiFlixApi.measureSpeedtestPingAndJitter(samples = 4, includeWarmup = true)
+            if (pingRes != null) {
+                recordPingSample(pingRes.pingMs, pingRes.jitterMs)
+            }
+            val downMbps = ManiFlixApi.measureSpeedtestDownloadMbps(
+                streams = 4,
+                bytesPerStream = 5_000_000L,
+                fallbackKb = 2048
+            )
+            val upMbps = ManiFlixApi.measureSpeedtestUploadMbps(streams = 2)
             if (downMbps > 0.0) currentDownMbps = downMbps
             if (upMbps > 0.0) currentUpMbps = upMbps
             userSeries.add(
@@ -225,16 +235,41 @@ fun DeviceMonitorScreen(
                 )
             )
             while (userSeries.size > 36) userSeries.removeAt(0)
-        } else if (userSeries.isEmpty()) {
-            userSeries.add(UserNetSample(currentDownMbps, currentUpMbps, currentPingMs))
+        } finally {
+            isManualTesting = false
         }
     }
 
-    LaunchedEffect(liveProbeEnabled) {
-        performTick(downKb = 256, upKb = 128, runSpeedProbe = liveProbeEnabled)
+    suspend fun runLiveProbeTick() {
+        val pingRes = ManiFlixApi.measureSpeedtestPingAndJitter(samples = 1, includeWarmup = false)
+        if (pingRes != null) {
+            recordPingSample(pingRes.pingMs, jitterOverride = null)
+        }
+        val downMbps = ManiFlixApi.measureSpeedtestDownloadMbps(
+            streams = 1,
+            bytesPerStream = 1_000_000L,
+            fallbackKb = 1024
+        )
+        if (downMbps > 0.0) currentDownMbps = downMbps
+        userSeries.add(
+            UserNetSample(
+                downMbps = currentDownMbps,
+                upMbps = currentUpMbps,
+                pingMs = currentPingMs
+            )
+        )
+        while (userSeries.size > 36) userSeries.removeAt(0)
+    }
+
+    LaunchedEffect(Unit) {
+        refreshServerTelemetry()
+        runFullSpeedtest()
         while (isActive) {
-            delay(2_200L)
-            performTick(downKb = 256, upKb = 128, runSpeedProbe = liveProbeEnabled)
+            delay(8_000L)
+            refreshServerTelemetry()
+            if (liveProbeEnabled && !isManualTesting) {
+                runLiveProbeTick()
+            }
         }
     }
 
@@ -339,9 +374,7 @@ fun DeviceMonitorScreen(
                                 if (!isManualTesting) {
                                     triggerHaptic(haptic)
                                     scope.launch {
-                                        isManualTesting = true
-                                        performTick(downKb = 768, upKb = 128, runSpeedProbe = true)
-                                        isManualTesting = false
+                                        runFullSpeedtest()
                                     }
                                 }
                             },
@@ -1196,8 +1229,7 @@ private fun detectAndroidCodecs(): List<CodecSupportItem> {
     )
 }
 
-private fun fetchServerStatsTimed(): Pair<Int, ServerNetSnapshot?> {
-    val startNs = System.nanoTime()
+private fun fetchServerStatsSnapshot(): ServerNetSnapshot? {
     var conn: HttpURLConnection? = null
     return try {
         val url = URL("${AppPreferences.BASE_URL}/api/net-stats?_t=${System.currentTimeMillis()}")
@@ -1205,13 +1237,12 @@ private fun fetchServerStatsTimed(): Pair<Int, ServerNetSnapshot?> {
             requestMethod = "GET"
             connectTimeout = 8_000
             readTimeout = 10_000
-            setRequestProperty("User-Agent", "ManiFlixAndroid/1.0")
+            setRequestProperty("User-Agent", "ManiFlixAndroid/1.0.6")
             setRequestProperty("Accept", "application/json")
         }
         val code = conn.responseCode
-        val elapsedMs = ((System.nanoTime() - startNs) / 1_000_000L).toInt().coerceAtLeast(1)
         if (code !in 200..299) {
-            return elapsedMs to null
+            return null
         }
         val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         val json = JSONObject(body)
@@ -1231,7 +1262,7 @@ private fun fetchServerStatsTimed(): Pair<Int, ServerNetSnapshot?> {
                 }
             }
         }
-        elapsedMs to ServerNetSnapshot(
+        ServerNetSnapshot(
             txMbps = json.optDouble("txMbps", 0.0),
             rxMbps = json.optDouble("rxMbps", 0.0),
             cpuPct = json.optInt("cpuPct", 0),
@@ -1242,59 +1273,7 @@ private fun fetchServerStatsTimed(): Pair<Int, ServerNetSnapshot?> {
             history = histList
         )
     } catch (_: Throwable) {
-        0 to null
-    } finally {
-        conn?.disconnect()
-    }
-}
-
-private fun measureDownloadProbeMbps(kb: Int): Double {
-    val startNs = System.nanoTime()
-    var conn: HttpURLConnection? = null
-    return try {
-        val url = URL("${AppPreferences.BASE_URL}/api/net-probe?kb=$kb&_t=${System.currentTimeMillis()}")
-        conn = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 8_000
-            readTimeout = 15_000
-            setRequestProperty("User-Agent", "ManiFlixAndroid/1.0")
-        }
-        if (conn.responseCode !in 200..299) return 0.0
-        val bytes = ByteArrayOutputStream().use { out ->
-            conn.inputStream.copyTo(out)
-            out.size()
-        }
-        val dtSec = max(0.004, (System.nanoTime() - startNs) / 1_000_000_000.0)
-        (bytes * 8.0) / dtSec / 1_000_000.0
-    } catch (_: Throwable) {
-        0.0
-    } finally {
-        conn?.disconnect()
-    }
-}
-
-private fun measureUploadProbeMbps(kb: Int): Double {
-    val payload = ByteArray(kb * 1024) { idx -> ((idx * 29) and 0xFF).toByte() }
-    val startNs = System.nanoTime()
-    var conn: HttpURLConnection? = null
-    return try {
-        val url = URL("${AppPreferences.BASE_URL}/api/net-up?_t=${System.currentTimeMillis()}")
-        conn = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            connectTimeout = 8_000
-            readTimeout = 15_000
-            setRequestProperty("User-Agent", "ManiFlixAndroid/1.0")
-            setRequestProperty("Content-Type", "application/octet-stream")
-            setFixedLengthStreamingMode(payload.size)
-        }
-        conn.outputStream.use { it.write(payload) }
-        if (conn.responseCode !in 200..299) return 0.0
-        conn.inputStream.bufferedReader().use { it.readText() }
-        val dtSec = max(0.004, (System.nanoTime() - startNs) / 1_000_000_000.0)
-        (payload.size * 8.0) / dtSec / 1_000_000.0
-    } catch (_: Throwable) {
-        0.0
+        null
     } finally {
         conn?.disconnect()
     }

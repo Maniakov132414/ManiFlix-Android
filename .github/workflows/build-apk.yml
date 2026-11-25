@@ -144,16 +144,15 @@ jobs:
           name: maniflix-apk
           path: dist/ManiFlix.apk
 
-      - name: Publish GitHub Release v1.0.5
+      - name: Publish GitHub Release v1.0.6
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.5
-          name: ManiFlix Android v1.0.5
+          tag_name: v1.0.6
+          name: ManiFlix Android v1.0.6
           body: |
-            ManiFlix Native Android v1.0.5 (Build 6)
-            - Sửa lỗi đường dẫn ảnh `upload/vod/` giúp tải đầy đủ poster và banner phim từ PhimAPI
-            - Bổ sung fallback tự động sang `thumb_url` khi poster gốc lỗi tải
-            - Tối ưu icon vector Material đồng bộ, bỏ hoàn toàn emoji trên nút bấm
+            ManiFlix Native Android v1.0.6 (Build 7)
+            - Nâng cấp Speedtest đa luồng qua OkHttp streaming: 4 luồng tải xuống song song (5 MB x 4 = 20 MB), 2 luồng tải lên song song (1 MB x 2) và Ping/Jitter Cloudflare có warm-up kèm fallback máy chủ ManiFlix
+            - Mặc định tắt Live Probe (`TẮT`), tự động chạy 1 lần Speedtest chuẩn khi mở màn hình và thăm dò `1 MB` mỗi `8s` khi bật Live Probe
             - `ManiFlix.apk`: Bản Universal đa kiến trúc (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) tương thích Android 7.0+
           files: dist/ManiFlix.apk
           overwrite_files: true
