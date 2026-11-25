@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -52,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
@@ -108,13 +110,15 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item(key = "settings_title") {
-            Text(
-                text = "Cài đặt",
-                fontSize = 30.sp,
-                fontWeight = FontWeight.Bold,
-                color = textPrimary,
-                modifier = Modifier.statusBarsPadding()
-            )
+            SettingsMaxWidthContainer {
+                Text(
+                    text = "Cài đặt",
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = textPrimary,
+                    modifier = Modifier.statusBarsPadding()
+                )
+            }
         }
 
         // Tài khoản
@@ -949,26 +953,51 @@ private fun RgbChannelSlider(
 }
 
 @Composable
+private fun SettingsMaxWidthContainer(
+    content: @Composable () -> Unit
+) {
+    val isWide = LocalConfiguration.current.screenWidthDp >= 700
+    if (isWide) {
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Box(
+                modifier = Modifier
+                    .widthIn(max = 720.dp)
+                    .fillMaxWidth()
+            ) {
+                content()
+            }
+        }
+    } else {
+        content()
+    }
+}
+
+@Composable
 private fun SettingsSection(
     title: String,
     textSecondary: Color,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = title.uppercase(),
-            fontSize = 11.5.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = textSecondary,
-            letterSpacing = 0.6.sp,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(appleGlassSurfaceModifier(cornerRadius = 14.dp)),
-            content = content
-        )
+    SettingsMaxWidthContainer {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = title.uppercase(),
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = textSecondary,
+                letterSpacing = 0.6.sp,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(appleGlassSurfaceModifier(cornerRadius = 14.dp)),
+                content = content
+            )
+        }
     }
 }
 

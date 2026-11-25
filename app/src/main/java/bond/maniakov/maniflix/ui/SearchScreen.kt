@@ -38,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -46,7 +47,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import bond.maniakov.maniflix.data.AppPreferences
 import bond.maniakov.maniflix.data.AppState
 import bond.maniakov.maniflix.data.ManiFlixApi
 import bond.maniakov.maniflix.model.MovieItem
@@ -110,7 +110,7 @@ fun SearchScreen(
     }
 
     val visibleResults = results.filter { !AppState.isBlocked(it.slug) }
-    val gridColumns = AppPreferences.gridColumnsPhone.coerceIn(2, 3)
+    val gridColumns = adaptiveGridColumns(LocalConfiguration.current.screenWidthDp)
     val resultRows = remember(visibleResults, gridColumns) {
         visibleResults.chunked(gridColumns)
     }

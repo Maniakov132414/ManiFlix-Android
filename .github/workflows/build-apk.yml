@@ -144,17 +144,18 @@ jobs:
           name: maniflix-apk
           path: dist/ManiFlix.apk
 
-      - name: Publish GitHub Release v1.0.2
+      - name: Publish GitHub Release v1.0.3
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.2
-          name: ManiFlix Android v1.0.2
+          tag_name: v1.0.3
+          name: ManiFlix Android v1.0.3
           body: |
-            ManiFlix Native Android v1.0.2 (Build 3 • Jetpack Compose + Media3 HLS)
-            - Đồng bộ thanh chỉ báo Hero dạng pill bên dưới banner
-            - Hỗ trợ đầy đủ chế độ giao diện Sáng / Tối / Đen OLED / Tuỳ chỉnh màu và đồng bộ tài khoản
-            - Tối ưu vùng an toàn màn hình (safeDrawing insets) & layout cho mọi kích thước máy
-            - `ManiFlix.apk`: Bản Universal đa kiến trúc (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) tương thích Android 7.0+ trên mọi điện thoại, TV và giả lập
+            ManiFlix Native Android v1.0.3 (Build 4 • Tablet & Foldable/Duo Edition)
+            - Giao diện thích ứng cho Tablet & Màn hình gập/Duo với thanh điều hướng `NavigationRail` bên trái
+            - Bố cục chia 2 cột thông minh (`2-Pane Split`) trong Chi tiết phim tránh nếp gấp bản lề và tối ưu không gian
+            - Lưới poster tự động co giãn 4–6 cột theo độ rộng màn hình (Điện thoại / Màn gập / Tablet)
+            - Hỗ trợ đa cửa sổ (`resizeableActivity`) và xoay tự do trên màn hình lớn / Tablet
+            - `ManiFlix.apk`: Bản Universal đa kiến trúc (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) tương thích Android 7.0+
           files: dist/ManiFlix.apk
           overwrite_files: true
           make_latest: true

@@ -22,11 +22,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,6 +45,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,6 +65,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -236,110 +243,174 @@ private fun RootScaffold(
     val accent = ManiFlixColors.accent()
     val textPrimary = ManiFlixColors.textPrimary()
     val textSecondary = ManiFlixColors.textSecondary()
+    val isWideScreen = LocalConfiguration.current.screenWidthDp >= 600
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(bg)
     ) {
-        Scaffold(
-            containerColor = bg,
-            bottomBar = {
-                if (!isPlayerOverlayVisible && !isPiP) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        if (showMiniPlayer && activeEngine != null) {
-                            MiniPlayerBar(
-                                engine = activeEngine,
-                                onExpand = { AppState.isPlayerPresented = true },
-                                onClose = onClosePlayer,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
-                        }
-
-                        NavigationBar(
-                            containerColor = surface.copy(alpha = 0.96f),
-                            tonalElevation = 0.dp
-                        ) {
-                            MainTab.entries.forEach { tab ->
-                                val selected = selectedTab == tab
-                                NavigationBarItem(
-                                    selected = selected,
-                                    onClick = {
-                                        selectedTab = tab
-                                        detailStack.clear()
-                                    },
-                                    icon = {
-                                        Icon(
-                                            imageVector = tab.icon,
-                                            contentDescription = tab.label
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = tab.label,
-                                            fontSize = 11.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = accent,
-                                        selectedTextColor = accent,
-                                        indicatorColor = accent.copy(alpha = 0.16f),
-                                        unselectedIconColor = textSecondary,
-                                        unselectedTextColor = textSecondary
-                                    )
+        Row(modifier = Modifier.fillMaxSize()) {
+            if (isWideScreen && !isPlayerOverlayVisible && !isPiP) {
+                NavigationRail(
+                    containerColor = surface.copy(alpha = 0.96f),
+                    modifier = Modifier.statusBarsPadding()
+                ) {
+                    MainTab.entries.forEach { tab ->
+                        val selected = selectedTab == tab
+                        NavigationRailItem(
+                            selected = selected,
+                            onClick = {
+                                selectedTab = tab
+                                detailStack.clear()
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = tab.label
                                 )
+                            },
+                            label = {
+                                Text(
+                                    text = tab.label,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            colors = NavigationRailItemDefaults.colors(
+                                selectedIconColor = accent,
+                                selectedTextColor = accent,
+                                indicatorColor = accent.copy(alpha = 0.16f),
+                                unselectedIconColor = textSecondary,
+                                unselectedTextColor = textSecondary
+                            )
+                        )
+                    }
+                }
+            }
+
+            Scaffold(
+                modifier = Modifier.weight(1f),
+                containerColor = bg,
+                bottomBar = {
+                    if (!isPlayerOverlayVisible && !isPiP) {
+                        if (isWideScreen) {
+                            if (showMiniPlayer && activeEngine != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .navigationBarsPadding()
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    MiniPlayerBar(
+                                        engine = activeEngine,
+                                        onExpand = { AppState.isPlayerPresented = true },
+                                        onClose = onClosePlayer,
+                                        modifier = Modifier
+                                            .widthIn(max = 520.dp)
+                                            .fillMaxWidth()
+                                    )
+                                }
+                            }
+                        } else {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                if (showMiniPlayer && activeEngine != null) {
+                                    MiniPlayerBar(
+                                        engine = activeEngine,
+                                        onExpand = { AppState.isPlayerPresented = true },
+                                        onClose = onClosePlayer,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    )
+                                }
+
+                                NavigationBar(
+                                    containerColor = surface.copy(alpha = 0.96f),
+                                    tonalElevation = 0.dp
+                                ) {
+                                    MainTab.entries.forEach { tab ->
+                                        val selected = selectedTab == tab
+                                        NavigationBarItem(
+                                            selected = selected,
+                                            onClick = {
+                                                selectedTab = tab
+                                                detailStack.clear()
+                                            },
+                                            icon = {
+                                                Icon(
+                                                    imageVector = tab.icon,
+                                                    contentDescription = tab.label
+                                                )
+                                            },
+                                            label = {
+                                                Text(
+                                                    text = tab.label,
+                                                    fontSize = 11.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            },
+                                            colors = NavigationBarItemDefaults.colors(
+                                                selectedIconColor = accent,
+                                                selectedTextColor = accent,
+                                                indicatorColor = accent.copy(alpha = 0.16f),
+                                                unselectedIconColor = textSecondary,
+                                                unselectedTextColor = textSecondary
+                                            )
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
-            }
-        ) { innerPadding ->
-            val bottomPadding = innerPadding.calculateBottomPadding() + 12.dp
-            val currentDetail = detailStack.lastOrNull()
-            if (currentDetail != null) {
-                MovieDetailScreen(
-                    slug = currentDetail.slug,
-                    seedMovie = currentDetail.seedMovie,
-                    bottomContentPadding = bottomPadding,
-                    onBack = {
-                        if (detailStack.isNotEmpty()) {
-                            detailStack.removeAt(detailStack.lastIndex)
+            ) { innerPadding ->
+                val bottomPadding = innerPadding.calculateBottomPadding() + 12.dp
+                val currentDetail = detailStack.lastOrNull()
+                if (currentDetail != null) {
+                    MovieDetailScreen(
+                        slug = currentDetail.slug,
+                        seedMovie = currentDetail.seedMovie,
+                        bottomContentPadding = bottomPadding,
+                        onBack = {
+                            if (detailStack.isNotEmpty()) {
+                                detailStack.removeAt(detailStack.lastIndex)
+                            }
+                        },
+                        onSelectMovie = { slug, seed ->
+                            detailStack.add(DetailNavEntry(slug, seed))
                         }
-                    },
-                    onSelectMovie = { slug, seed ->
-                        detailStack.add(DetailNavEntry(slug, seed))
+                    )
+                } else {
+                    when (selectedTab) {
+                        MainTab.DISCOVER -> DiscoverScreen(
+                            bottomContentPadding = bottomPadding,
+                            onMovieClick = { slug, seed ->
+                                detailStack.add(DetailNavEntry(slug, seed))
+                            }
+                        )
+
+                        MainTab.SEARCH -> SearchScreen(
+                            bottomContentPadding = bottomPadding,
+                            onMovieClick = { slug, seed ->
+                                detailStack.add(DetailNavEntry(slug, seed))
+                            }
+                        )
+
+                        MainTab.LIBRARY -> LibraryScreen(
+                            bottomContentPadding = bottomPadding,
+                            onMovieClick = { slug, seed ->
+                                detailStack.add(DetailNavEntry(slug, seed))
+                            }
+                        )
+
+                        MainTab.SETTINGS -> SettingsScreen(
+                            bottomContentPadding = bottomPadding
+                        )
                     }
-                )
-            } else {
-                when (selectedTab) {
-                    MainTab.DISCOVER -> DiscoverScreen(
-                        bottomContentPadding = bottomPadding,
-                        onMovieClick = { slug, seed ->
-                            detailStack.add(DetailNavEntry(slug, seed))
-                        }
-                    )
-
-                    MainTab.SEARCH -> SearchScreen(
-                        bottomContentPadding = bottomPadding,
-                        onMovieClick = { slug, seed ->
-                            detailStack.add(DetailNavEntry(slug, seed))
-                        }
-                    )
-
-                    MainTab.LIBRARY -> LibraryScreen(
-                        bottomContentPadding = bottomPadding,
-                        onMovieClick = { slug, seed ->
-                            detailStack.add(DetailNavEntry(slug, seed))
-                        }
-                    )
-
-                    MainTab.SETTINGS -> SettingsScreen(
-                        bottomContentPadding = bottomPadding
-                    )
                 }
             }
         }

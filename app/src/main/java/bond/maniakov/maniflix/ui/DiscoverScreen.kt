@@ -56,6 +56,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -92,6 +93,13 @@ private val DISCOVER_CATEGORIES = listOf(
     DiscoverCategoryOption("Kinh dị", "kinh-di"),
     DiscoverCategoryOption("Viễn tưởng", "vien-tuong")
 )
+
+internal fun adaptiveGridColumns(screenWidthDp: Int): Int = when {
+    screenWidthDp >= 1100 -> 6
+    screenWidthDp >= 840 -> 5
+    screenWidthDp >= 600 -> 4
+    else -> AppPreferences.gridColumnsPhone.coerceIn(2, 3)
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -247,7 +255,11 @@ fun DiscoverScreen(
         it.displayPosterUrl.ifBlank { it.displayThumbUrl }
     } ?: featuredHero.firstOrNull()?.displayPosterUrl
 
-    val gridColumns = AppPreferences.gridColumnsPhone.coerceIn(2, 3)
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val isWideScreen = screenWidthDp >= 600
+    val heroHeight = if (isWideScreen) 344.dp else 296.dp
+    val railCardWidth = if (isWideScreen) 138.dp else 120.dp
+    val gridColumns = adaptiveGridColumns(screenWidthDp)
     val gridRows = remember(activeGridItems, gridColumns) {
         activeGridItems.chunked(gridColumns)
     }
@@ -383,6 +395,7 @@ fun DiscoverScreen(
                                     HeroFeaturedCard(
                                         movie = movie,
                                         accent = accent,
+                                        height = heroHeight,
                                         onClick = { onMovieClick(movie.slug, movie) }
                                     )
                                 }
@@ -417,7 +430,7 @@ fun DiscoverScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp)
-                                    .height(276.dp)
+                                    .height(heroHeight)
                                     .clip(RoundedCornerShape(16.dp))
                                     .background(ManiFlixColors.surfaceElevated())
                             )
@@ -440,6 +453,7 @@ fun DiscoverScreen(
                                 HorizontalMovieRail(
                                     title = "Phim bộ mới",
                                     items = visibleSeries,
+                                    cardWidth = railCardWidth,
                                     onMovieClick = onMovieClick
                                 )
                             }
@@ -449,6 +463,7 @@ fun DiscoverScreen(
                                 HorizontalMovieRail(
                                     title = "Phim lẻ tuyển chọn",
                                     items = visibleSingle,
+                                    cardWidth = railCardWidth,
                                     onMovieClick = onMovieClick
                                 )
                             }
@@ -458,6 +473,7 @@ fun DiscoverScreen(
                                 HorizontalMovieRail(
                                     title = "Hoạt hình & Anime",
                                     items = visibleAnime,
+                                    cardWidth = railCardWidth,
                                     onMovieClick = onMovieClick
                                 )
                             }
@@ -568,6 +584,7 @@ fun DiscoverScreen(
 private fun HeroFeaturedCard(
     movie: MovieItem,
     accent: Color,
+    height: Dp = 296.dp,
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -580,7 +597,7 @@ private fun HeroFeaturedCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(296.dp)
+            .height(height)
             .clip(shape)
             .border(0.7.dp, Color.White.copy(alpha = 0.16f), shape)
             .combinedClickable(
@@ -899,6 +916,7 @@ private fun ContinueWatchingRail(
 private fun HorizontalMovieRail(
     title: String,
     items: List<MovieItem>,
+    cardWidth: Dp = 120.dp,
     onMovieClick: (slug: String, seedMovie: MovieItem?) -> Unit
 ) {
     val textPrimary = ManiFlixColors.textPrimary()
@@ -918,7 +936,7 @@ private fun HorizontalMovieRail(
             items(items, key = { it.slug }) { movie ->
                 MoviePosterCard(
                     movie = movie,
-                    modifier = Modifier.width(120.dp),
+                    modifier = Modifier.width(cardWidth),
                     onClick = { onMovieClick(movie.slug, movie) }
                 )
             }

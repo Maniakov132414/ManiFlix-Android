@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -55,7 +56,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import bond.maniakov.maniflix.data.AppPreferences
 import bond.maniakov.maniflix.data.AppState
 import bond.maniakov.maniflix.model.MovieItem
 import bond.maniakov.maniflix.player.PlayerEngine
@@ -309,7 +309,7 @@ fun LibraryScreen(
                             )
                         }
                     } else {
-                        val gridColumns = AppPreferences.gridColumnsPhone.coerceIn(2, 3)
+                        val gridColumns = adaptiveGridColumns(LocalConfiguration.current.screenWidthDp)
                         val favItems = remember(AppState.favorites) {
                             AppState.favorites.map { it.toMovieItem() }
                         }

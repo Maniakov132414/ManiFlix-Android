@@ -6,22 +6,29 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 
 /**
- * Controls player screen orientation and guarantees portrait restoration when leaving the player.
+ * Controls player screen orientation and preserves free orientation on large/foldable screens.
  */
 object OrientationHelper {
 
+    fun isLargeOrFoldable(context: Context): Boolean =
+        context.resources.configuration.smallestScreenWidthDp >= 600
+
     fun setPlayerLandscape(activity: Activity?, landscape: Boolean) {
         val target = activity ?: return
-        target.requestedOrientation = if (landscape) {
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        } else {
-            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        target.requestedOrientation = when {
+            landscape -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            isLargeOrFoldable(target) -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            else -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
     }
 
     fun forcePortrait(activity: Activity?) {
         val target = activity ?: return
-        target.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        target.requestedOrientation = if (isLargeOrFoldable(target)) {
+            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
     }
 }
 
