@@ -98,10 +98,7 @@ jobs:
               "$aligned"
           }
 
-          sign_apk "app-arm64-v8a-release*.apk" "ManiFlix-arm64.apk"
-          sign_apk "app-armeabi-v7a-release*.apk" "ManiFlix-armeabi-v7a.apk"
-          sign_apk "app-universal-release*.apk" "ManiFlix-Universal.apk"
-          cp "dist/ManiFlix-Universal.apk" "dist/ManiFlix.apk"
+          sign_apk "app-universal-release*.apk" "ManiFlix.apk"
           ls -lh dist/
 
       - name: Verify APKs with apksigner and Python inspector
@@ -110,45 +107,42 @@ jobs:
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
           APKSIGNER="$BUILD_TOOLS/apksigner"
 
-          for apk in dist/*.apk; do
-            echo "=== apksigner verify: $apk ==="
-            "$APKSIGNER" verify --verbose "$apk"
-          done
+          echo "=== apksigner verify: dist/ManiFlix.apk ==="
+          "$APKSIGNER" verify --verbose "dist/ManiFlix.apk"
 
           python3 - << 'PY'
           import pathlib
           import zipfile
 
           apks = sorted(pathlib.Path("dist").glob("*.apk"))
-          assert len(apks) == 4, f"Expected 4 APKs, got {len(apks)}"
+          assert [a.name for a in apks] == ["ManiFlix.apk"], f"Expected only ManiFlix.apk, got {[a.name for a in apks]}"
 
-          for apk in apks:
-              raw = apk.read_bytes()
-              assert b"APK Sig Block 42" in raw, f"{apk.name}: missing APK Signature Scheme v2/v3 block"
-              with zipfile.ZipFile(apk, "r") as zf:
-                  bad = zf.testzip()
-                  assert bad is None, f"{apk.name}: corrupt ZIP entry {bad}"
-                  names = zf.namelist()
-                  assert "AndroidManifest.xml" in names, f"{apk.name}: missing AndroidManifest.xml"
-                  dex_files = [n for n in names if n.startswith("classes") and n.endswith(".dex")]
-                  assert dex_files, f"{apk.name}: missing classes.dex"
-                  rsa_files = [n for n in names if n.startswith("META-INF/") and n.endswith((".RSA", ".DSA", ".EC"))]
-                  assert rsa_files, f"{apk.name}: missing v1 signature certificate in META-INF"
-                  abis = sorted({n.split("/")[1] for n in names if n.startswith("lib/") and len(n.split("/")) >= 3})
-                  if apk.name in ("ManiFlix.apk", "ManiFlix-Universal.apk"):
-                      for expected_abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64"):
-                          assert expected_abi in abis, f"{apk.name}: missing ABI {expected_abi}, got {abis}"
-                  print(
-                      f"PASS {apk.name}: size={len(raw)/1024/1024:.2f}MB "
-                      f"dex={len(dex_files)} v1={rsa_files[0]} v2/v3=True abis={abis}"
-                  )
+          apk = apks[0]
+          raw = apk.read_bytes()
+          assert b"APK Sig Block 42" in raw, f"{apk.name}: missing APK Signature Scheme v2/v3 block"
+          with zipfile.ZipFile(apk, "r") as zf:
+              bad = zf.testzip()
+              assert bad is None, f"{apk.name}: corrupt ZIP entry {bad}"
+              names = zf.namelist()
+              assert "AndroidManifest.xml" in names, f"{apk.name}: missing AndroidManifest.xml"
+              dex_files = [n for n in names if n.startswith("classes") and n.endswith(".dex")]
+              assert len(dex_files) >= 1, f"{apk.name}: missing classes.dex"
+              rsa_files = [n for n in names if n.startswith("META-INF/") and n.endswith((".RSA", ".DSA", ".EC"))]
+              assert rsa_files, f"{apk.name}: missing v1 signature certificate in META-INF"
+              abis = sorted({n.split("/")[1] for n in names if n.startswith("lib/") and len(n.split("/")) >= 3})
+              for expected_abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64"):
+                  assert expected_abi in abis, f"{apk.name}: missing ABI {expected_abi}, got {abis}"
+              print(
+                  f"PASS {apk.name}: size={len(raw)/1024/1024:.2f}MB "
+                  f"dex={len(dex_files)} v1={rsa_files[0]} v2/v3=True abis={abis}"
+              )
           PY
 
       - name: Upload APK build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: maniflix-apks
-          path: dist/*.apk
+          name: maniflix-apk
+          path: dist/ManiFlix.apk
 
       - name: Publish GitHub Release v1.0.1
         uses: softprops/action-gh-release@v2
@@ -160,8 +154,6 @@ jobs:
             - Hỗ trợ đầy đủ chế độ giao diện Sáng / Tối / Đen OLED / Tuỳ chỉnh màu và đồng bộ tài khoản
             - Nâng cấp Trang chủ (Hero xem nhanh, chip thể loại, phân trang) & Chi tiết phim (diễn viên, đạo diễn, phim liên quan)
             - Tối ưu vùng an toàn màn hình (safeDrawing insets) & layout cho mọi kích thước máy
-            - `ManiFlix.apk` / `ManiFlix-Universal.apk`: Gói đa kiến trúc (arm64-v8a, armeabi-v7a, x86, x86_64) chạy trên mọi điện thoại Android, TV và giả lập
-            - `ManiFlix-arm64.apk`: Tối ưu 64-bit ARM
-            - `ManiFlix-armeabi-v7a.apk`: 32-bit ARM cho máy Android đời cũ
-          files: dist/*.apk
+            - `ManiFlix.apk`: Bản Universal đa kiến trúc (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) tương thích Android 7.0+ trên mọi điện thoại, TV và giả lập
+          files: dist/ManiFlix.apk
           make_latest: true
