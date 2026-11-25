@@ -170,17 +170,27 @@ jobs:
           path: dist/*.apk
 
       - name: Publish GitHub Release v1.1.0
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v1.1.0
-          name: ManiFlix Android v1.1.0
-          body: |
-            ManiFlix Native Android & Android TV v1.1.0 (Build 8)
-            - Hỗ trợ Android TV / Google TV / TV Box (Viettel TV360, Mi Box...): Leanback Launcher, banner TV 320x180, tự động nhận diện TV / D-Pad và mục chọn chế độ TV/Điện thoại trong Cài đặt
-            - Giao diện 10-foot TV Leanback Compose chuyên dụng với điều hướng D-Pad mượt mà, thanh tìm kiếm kèm bàn phím nhanh D-Pad, trang chi tiết & chọn tập bằng remote
-            - Điều khiển trình phát bằng remote TV (DPAD_CENTER/ENTER, trái/phải tua nhanh, lên/xuống hiện HUD, phím Media, Back) & tự giữ hướng ngang trên TV/máy tính bảng
-            - Tối ưu 60/120fps cho Android & TV Box chip yếu (Coil RGB_565 trên TV/RAM thấp, cache giới hạn, kích thước ảnh chuẩn, bỏ blur toàn màn hình)
-            - `ManiFlix.apk` & `ManiFlix-AndroidTV.apk`: Bản Universal đa kiến trúc (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) tương thích Android 7.0+ (Điện thoại, Tablet & Android TV)
-          files: dist/*.apk
-          overwrite_files: true
-          make_latest: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          NOTES="ManiFlix Native Android & Android TV v1.1.0 (Build 8)
+          - Hỗ trợ Android TV / Google TV / TV Box (Viettel TV360, Mi Box...): Leanback Launcher, banner TV 320x180, giao diện 10-foot Android TV chuyên dụng (ManiFlix-AndroidTV.apk, bond.maniakov.maniflix.tv)
+          - Bản điện thoại & máy tính bảng (ManiFlix.apk, bond.maniakov.maniflix) tối ưu 60/120fps (Coil cache/downsampling, bỏ blur toàn màn hình)
+          - Điều khiển trình phát bằng remote TV (DPAD_CENTER/ENTER, trái/phải tua nhanh, lên/xuống hiện HUD, phím Media, Channel Up/Down, Back)
+          - ManiFlix.apk & ManiFlix-AndroidTV.apk: Bản Universal đa kiến trúc (arm64-v8a, armeabi-v7a, x86, x86_64) tương thích Android 7.0+"
+          for attempt in 1 2 3 4 5; do
+            if gh release view v1.1.0 >/dev/null 2>&1; then
+              if gh release upload v1.1.0 dist/*.apk --clobber && \
+                 gh release edit v1.1.0 --title "ManiFlix Android v1.1.0" --notes "$NOTES" --latest; then
+                exit 0
+              fi
+            else
+              if gh release create v1.1.0 dist/*.apk --title "ManiFlix Android v1.1.0" --notes "$NOTES" --latest; then
+                exit 0
+              fi
+            fi
+            echo "Release attempt $attempt failed, retrying in 12s..."
+            sleep 12
+          done
+          exit 1
