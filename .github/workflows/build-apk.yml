@@ -122,9 +122,11 @@ jobs:
           echo "$TV_BADGING" | grep -E "package:|application-label:|leanback|application-banner|launchable-activity" || true
 
           echo "$MOBILE_BADGING" | grep -q "name='bond.maniakov.maniflix'"
+          echo "$MOBILE_BADGING" | grep -q "application-label:'ManiFlix'"
           echo "$TV_BADGING" | grep -q "name='bond.maniakov.maniflix.tv'"
-          echo "$TV_BADGING" | grep -q "LEANBACK_LAUNCHER\|leanback"
-          echo "$TV_BADGING" | grep -q "application-banner"
+          echo "$TV_BADGING" | grep -q "application-label:'ManiFlix TV'"
+          echo "$TV_BADGING" | grep -q "leanback-launchable-activity"
+          echo "$TV_BADGING" | grep -q "banner='"
 
           python3 - << 'PY'
           import hashlib
@@ -146,8 +148,7 @@ jobs:
                   assert bad is None, f"{apk.name}: corrupt ZIP entry {bad}"
                   names = zf.namelist()
                   assert "AndroidManifest.xml" in names, f"{apk.name}: missing AndroidManifest.xml"
-                  if apk.name == "ManiFlix-AndroidTV.apk":
-                      assert any("tv_banner" in n for n in names), f"{apk.name}: missing tv_banner drawable"
+                  assert "resources.arsc" in names, f"{apk.name}: missing resources.arsc"
                   dex_files = [n for n in names if n.startswith("classes") and n.endswith(".dex")]
                   assert len(dex_files) >= 1, f"{apk.name}: missing classes.dex"
                   rsa_files = [n for n in names if n.startswith("META-INF/") and n.endswith((".RSA", ".DSA", ".EC"))]
