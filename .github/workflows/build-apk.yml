@@ -57,7 +57,7 @@ jobs:
           KEY_ALIAS: maniflix
           KEY_PASSWORD: ManiFlixRelease2026!
         run: |
-          gradle assembleRelease --no-daemon --stacktrace
+          gradle assembleMobileRelease assembleTvRelease --no-daemon --stacktrace
 
       - name: Align, sign (v1+v2+v3), and package APKs into dist/
         run: |
@@ -65,18 +65,18 @@ jobs:
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
           ZIPALIGN="$BUILD_TOOLS/zipalign"
           APKSIGNER="$BUILD_TOOLS/apksigner"
-          APK_DIR="app/build/outputs/apk/release"
 
           mkdir -p dist /tmp/aligned
 
           sign_apk() {
-            local pattern="$1"
-            local out_name="$2"
+            local apk_dir="$1"
+            local pattern="$2"
+            local out_name="$3"
             local src
-            src=$(find "$APK_DIR" -maxdepth 1 -name "$pattern" | head -n 1)
+            src=$(find "$apk_dir" -maxdepth 1 -name "$pattern" | head -n 1)
             if [ -z "$src" ]; then
-              echo "ERROR: Could not find APK matching $pattern in $APK_DIR"
-              ls -la "$APK_DIR"
+              echo "ERROR: Could not find APK matching $pattern in $apk_dir"
+              ls -la "$apk_dir" || true
               exit 1
             fi
             echo "Found $src -> dist/$out_name"
@@ -98,7 +98,8 @@ jobs:
               "$aligned"
           }
 
-          sign_apk "app-universal-release*.apk" "ManiFlix.apk"
+          sign_apk "app/build/outputs/apk/mobile/release" "app-mobile-universal-release*.apk" "ManiFlix.apk"
+          sign_apk "app/build/outputs/apk/tv/release" "app-tv-universal-release*.apk" "ManiFlix-AndroidTV.apk"
           ls -lh dist/
 
       - name: Verify APKs with apksigner and Python inspector
@@ -106,54 +107,79 @@ jobs:
           set -euo pipefail
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
           APKSIGNER="$BUILD_TOOLS/apksigner"
+          AAPT2="$BUILD_TOOLS/aapt2"
 
-          echo "=== apksigner verify: dist/ManiFlix.apk ==="
-          "$APKSIGNER" verify --verbose "dist/ManiFlix.apk"
+          for apk_file in dist/*.apk; do
+            echo "=== apksigner verify: $apk_file ==="
+            "$APKSIGNER" verify --verbose "$apk_file"
+          done
+
+          MOBILE_BADGING=$("$AAPT2" dump badging "dist/ManiFlix.apk")
+          TV_BADGING=$("$AAPT2" dump badging "dist/ManiFlix-AndroidTV.apk")
+          echo "=== Mobile package ==="
+          echo "$MOBILE_BADGING" | grep -E "package:|application-label:|launchable-activity" || true
+          echo "=== TV package ==="
+          echo "$TV_BADGING" | grep -E "package:|application-label:|leanback|application-banner|launchable-activity" || true
+
+          echo "$MOBILE_BADGING" | grep -q "name='bond.maniakov.maniflix'"
+          echo "$TV_BADGING" | grep -q "name='bond.maniakov.maniflix.tv'"
+          echo "$TV_BADGING" | grep -q "LEANBACK_LAUNCHER\|leanback"
+          echo "$TV_BADGING" | grep -q "application-banner"
 
           python3 - << 'PY'
+          import hashlib
           import pathlib
           import zipfile
 
           apks = sorted(pathlib.Path("dist").glob("*.apk"))
-          assert [a.name for a in apks] == ["ManiFlix.apk"], f"Expected only ManiFlix.apk, got {[a.name for a in apks]}"
+          assert [a.name for a in apks] == ["ManiFlix-AndroidTV.apk", "ManiFlix.apk"], (
+              f"Expected ManiFlix-AndroidTV.apk and ManiFlix.apk, got {[a.name for a in apks]}"
+          )
 
-          apk = apks[0]
-          raw = apk.read_bytes()
-          assert b"APK Sig Block 42" in raw, f"{apk.name}: missing APK Signature Scheme v2/v3 block"
-          with zipfile.ZipFile(apk, "r") as zf:
-              bad = zf.testzip()
-              assert bad is None, f"{apk.name}: corrupt ZIP entry {bad}"
-              names = zf.namelist()
-              assert "AndroidManifest.xml" in names, f"{apk.name}: missing AndroidManifest.xml"
-              dex_files = [n for n in names if n.startswith("classes") and n.endswith(".dex")]
-              assert len(dex_files) >= 1, f"{apk.name}: missing classes.dex"
-              rsa_files = [n for n in names if n.startswith("META-INF/") and n.endswith((".RSA", ".DSA", ".EC"))]
-              assert rsa_files, f"{apk.name}: missing v1 signature certificate in META-INF"
-              abis = sorted({n.split("/")[1] for n in names if n.startswith("lib/") and len(n.split("/")) >= 3})
-              for expected_abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64"):
-                  assert expected_abi in abis, f"{apk.name}: missing ABI {expected_abi}, got {abis}"
-              print(
-                  f"PASS {apk.name}: size={len(raw)/1024/1024:.2f}MB "
-                  f"dex={len(dex_files)} v1={rsa_files[0]} v2/v3=True abis={abis}"
-              )
+          hashes = set()
+          for apk in apks:
+              raw = apk.read_bytes()
+              hashes.add(hashlib.sha256(raw).hexdigest())
+              assert b"APK Sig Block 42" in raw, f"{apk.name}: missing APK Signature Scheme v2/v3 block"
+              with zipfile.ZipFile(apk, "r") as zf:
+                  bad = zf.testzip()
+                  assert bad is None, f"{apk.name}: corrupt ZIP entry {bad}"
+                  names = zf.namelist()
+                  assert "AndroidManifest.xml" in names, f"{apk.name}: missing AndroidManifest.xml"
+                  if apk.name == "ManiFlix-AndroidTV.apk":
+                      assert any("tv_banner" in n for n in names), f"{apk.name}: missing tv_banner drawable"
+                  dex_files = [n for n in names if n.startswith("classes") and n.endswith(".dex")]
+                  assert len(dex_files) >= 1, f"{apk.name}: missing classes.dex"
+                  rsa_files = [n for n in names if n.startswith("META-INF/") and n.endswith((".RSA", ".DSA", ".EC"))]
+                  assert rsa_files, f"{apk.name}: missing v1 signature certificate in META-INF"
+                  abis = sorted({n.split("/")[1] for n in names if n.startswith("lib/") and len(n.split("/")) >= 3})
+                  for expected_abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64"):
+                      assert expected_abi in abis, f"{apk.name}: missing ABI {expected_abi}, got {abis}"
+                  print(
+                      f"PASS {apk.name}: size={len(raw)} bytes ({len(raw)/1024/1024:.2f}MB) "
+                      f"dex={len(dex_files)} v1={rsa_files[0]} v2/v3=True abis={abis}"
+                  )
+          assert len(hashes) == 2, "Expected distinct compiled APKs for mobile vs tv flavors!"
           PY
 
       - name: Upload APK build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: maniflix-apk
-          path: dist/ManiFlix.apk
+          path: dist/*.apk
 
-      - name: Publish GitHub Release v1.0.6
+      - name: Publish GitHub Release v1.1.0
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.6
-          name: ManiFlix Android v1.0.6
+          tag_name: v1.1.0
+          name: ManiFlix Android v1.1.0
           body: |
-            ManiFlix Native Android v1.0.6 (Build 7)
-            - Nâng cấp Speedtest đa luồng qua OkHttp streaming: 4 luồng tải xuống song song (5 MB x 4 = 20 MB), 2 luồng tải lên song song (1 MB x 2) và Ping/Jitter Cloudflare có warm-up kèm fallback máy chủ ManiFlix
-            - Mặc định tắt Live Probe (`TẮT`), tự động chạy 1 lần Speedtest chuẩn khi mở màn hình và thăm dò `1 MB` mỗi `8s` khi bật Live Probe
-            - `ManiFlix.apk`: Bản Universal đa kiến trúc (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) tương thích Android 7.0+
-          files: dist/ManiFlix.apk
+            ManiFlix Native Android & Android TV v1.1.0 (Build 8)
+            - Hỗ trợ Android TV / Google TV / TV Box (Viettel TV360, Mi Box...): Leanback Launcher, banner TV 320x180, tự động nhận diện TV / D-Pad và mục chọn chế độ TV/Điện thoại trong Cài đặt
+            - Giao diện 10-foot TV Leanback Compose chuyên dụng với điều hướng D-Pad mượt mà, thanh tìm kiếm kèm bàn phím nhanh D-Pad, trang chi tiết & chọn tập bằng remote
+            - Điều khiển trình phát bằng remote TV (DPAD_CENTER/ENTER, trái/phải tua nhanh, lên/xuống hiện HUD, phím Media, Back) & tự giữ hướng ngang trên TV/máy tính bảng
+            - Tối ưu 60/120fps cho Android & TV Box chip yếu (Coil RGB_565 trên TV/RAM thấp, cache giới hạn, kích thước ảnh chuẩn, bỏ blur toàn màn hình)
+            - `ManiFlix.apk` & `ManiFlix-AndroidTV.apk`: Bản Universal đa kiến trúc (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) tương thích Android 7.0+ (Điện thoại, Tablet & Android TV)
+          files: dist/*.apk
           overwrite_files: true
           make_latest: true

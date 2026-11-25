@@ -1,7 +1,10 @@
 package bond.maniakov.maniflix
 
+import android.app.ActivityManager
 import android.app.PictureInPictureParams
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color as AndroidColor
 import android.os.Build
@@ -71,6 +74,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import bond.maniakov.maniflix.BuildConfig
 import bond.maniakov.maniflix.data.AppPreferences
 import bond.maniakov.maniflix.data.AppState
 import bond.maniakov.maniflix.data.UpdateManager
@@ -85,12 +89,18 @@ import bond.maniakov.maniflix.ui.LibraryScreen
 import bond.maniakov.maniflix.ui.MovieDetailScreen
 import bond.maniakov.maniflix.ui.SearchScreen
 import bond.maniakov.maniflix.ui.SettingsScreen
+import bond.maniakov.maniflix.ui.TvShellScreen
 import bond.maniakov.maniflix.ui.UpdatePromptDialog
 import bond.maniakov.maniflix.ui.appleGlassSurfaceModifier
 import bond.maniakov.maniflix.ui.theme.ManiFlixColors
 import bond.maniakov.maniflix.ui.theme.ManiFlixTheme
+import coil.Coil
+import coil.ImageLoader
 import coil.compose.AsyncImage
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
 import coil.request.ImageRequest
+import java.io.File
 
 class MainActivity : ComponentActivity() {
 
@@ -103,6 +113,7 @@ class MainActivity : ComponentActivity() {
 
         AppPreferences.init(applicationContext)
         AppState.init(applicationContext)
+        configureCoilImageLoader(applicationContext)
         AppState.onLaunchInternalPlayer = { ctx, movie, servers, serverIdx, episodeIdx, resumeSec ->
             PlayerSessionHolder.open(ctx, movie, servers, serverIdx, episodeIdx, resumeSec)
         }
@@ -155,8 +166,33 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun configureCoilImageLoader(appContext: Context) {
+        val am = appContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        val isLowRamOrTv = am?.isLowRamDevice == true || BuildConfig.IS_TV_BUILD
+        val loader = ImageLoader.Builder(appContext)
+            .memoryCache {
+                MemoryCache.Builder(appContext)
+                    .maxSizePercent(0.22)
+                    .build()
+            }
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(File(appContext.cacheDir, "coil_image_cache"))
+                    .maxSizeBytes(64L * 1024L * 1024L)
+                    .build()
+            }
+            .allowHardware(true)
+            .allowRgb565(isLowRamOrTv)
+            .crossfade(true)
+            .build()
+        Coil.setImageLoader(loader)
+    }
+
     fun enterPiPMode() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val supportsPiP = !BuildConfig.IS_TV_BUILD &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+        if (supportsPiP) {
             val params = PictureInPictureParams.Builder()
                 .setAspectRatio(Rational(16, 9))
                 .build()
@@ -167,6 +203,9 @@ class MainActivity : ComponentActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         if (
+            !BuildConfig.IS_TV_BUILD &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE) &&
             AppState.isPlayerPresented &&
             AppPreferences.autoPiP &&
             PlayerSessionHolder.activeEngine != null
@@ -243,6 +282,7 @@ private fun RootScaffold(
     val accent = ManiFlixColors.accent()
     val textPrimary = ManiFlixColors.textPrimary()
     val textSecondary = ManiFlixColors.textSecondary()
+    val isTvMode = BuildConfig.IS_TV_BUILD
     val isWideScreen = LocalConfiguration.current.screenWidthDp >= 600
 
     Box(
@@ -250,7 +290,25 @@ private fun RootScaffold(
             .fillMaxSize()
             .background(bg)
     ) {
-        Row(modifier = Modifier.fillMaxSize()) {
+        if (isTvMode) {
+            val currentDetail = detailStack.lastOrNull()
+            TvShellScreen(
+                activeDetailSlug = currentDetail?.slug,
+                activeDetailSeed = currentDetail?.seedMovie,
+                onMovieClick = { slug, seed ->
+                    detailStack.add(DetailNavEntry(slug, seed))
+                },
+                onCloseDetail = {
+                    if (detailStack.isNotEmpty()) {
+                        detailStack.removeAt(detailStack.lastIndex)
+                    }
+                },
+                onClearDetails = {
+                    detailStack.clear()
+                }
+            )
+        } else {
+            Row(modifier = Modifier.fillMaxSize()) {
             if (isWideScreen && !isPlayerOverlayVisible && !isPiP) {
                 NavigationRail(
                     containerColor = surface.copy(alpha = 0.96f),
@@ -413,6 +471,7 @@ private fun RootScaffold(
                     }
                 }
             }
+        }
         }
 
         if (isPlayerOverlayVisible && activeEngine != null) {

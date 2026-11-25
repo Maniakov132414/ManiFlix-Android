@@ -43,8 +43,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedback
@@ -64,6 +64,7 @@ import bond.maniakov.maniflix.model.MovieItem
 import bond.maniakov.maniflix.ui.theme.ManiFlixColors
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import coil.size.Precision
 import kotlinx.coroutines.launch
 
 fun triggerHaptic(haptic: HapticFeedback, strong: Boolean = false) {
@@ -113,65 +114,39 @@ fun AmbientArtworkBackground(
     height: Dp = 360.dp
 ) {
     val bgColor = ManiFlixColors.background()
+    val accent = ManiFlixColors.accent()
     val isLight = ManiFlixColors.isLight()
-
-    if (!AppPreferences.ambientArtworkEnabled || imageUrl.isNullOrBlank()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(height)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            ManiFlixColors.accent().copy(alpha = if (isLight) 0.09f else if (oled) 0.08f else 0.13f),
-                            bgColor
-                        )
-                    )
-                )
-        )
-        return
-    }
-
-    val context = LocalContext.current
-    val supportsNativeBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val artworkAlpha = when {
-        isLight && !supportsNativeBlur -> 0.14f
-        isLight -> 0.24f
-        !supportsNativeBlur -> if (oled) 0.16f else 0.22f
-        oled -> 0.34f
-        else -> 0.46f
+    val enabled = AppPreferences.ambientArtworkEnabled && !imageUrl.isNullOrBlank()
+    val glowAlpha = when {
+        !enabled -> if (isLight) 0.08f else if (oled) 0.07f else 0.11f
+        isLight -> 0.16f
+        oled -> 0.15f
+        else -> 0.24f
     }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(height)
-    ) {
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(imageUrl)
-                .crossfade(true)
-                .build(),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .then(if (supportsNativeBlur) Modifier.blur(50.dp) else Modifier)
-                .alpha(artworkAlpha)
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        0.0f to if (isLight) bgColor.copy(alpha = 0.28f) else Color.Black.copy(alpha = 0.20f),
-                        0.48f to bgColor.copy(alpha = if (supportsNativeBlur) 0.62f else 0.76f),
-                        1.0f to bgColor
-                    )
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(
+                        accent.copy(alpha = glowAlpha),
+                        bgColor.copy(alpha = if (oled) 0.96f else 0.85f),
+                        bgColor
+                    ),
+                    center = Offset(320f, 120f),
+                    radius = 900f
                 )
-        )
-    }
+            )
+            .background(
+                Brush.verticalGradient(
+                    0.0f to Color.Transparent,
+                    0.55f to bgColor.copy(alpha = 0.55f),
+                    1.0f to bgColor
+                )
+            )
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -222,6 +197,8 @@ fun MoviePosterCard(
             AsyncImage(
                 model = ImageRequest.Builder(context)
                     .data(resolvedUrl)
+                    .size(320, 480)
+                    .precision(Precision.INEXACT)
                     .crossfade(true)
                     .build(),
                 contentDescription = movie.name,

@@ -73,6 +73,7 @@ import bond.maniakov.maniflix.model.MovieItem
 import bond.maniakov.maniflix.ui.theme.ManiFlixColors
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import coil.size.Precision
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -517,7 +518,8 @@ fun DiscoverScreen(
                     } else {
                         items(
                             items = gridRows,
-                            key = { row -> "${selectedCategory.label}-${row.joinToString("-") { it.slug }}" }
+                            key = { row -> "${selectedCategory.label}-${row.joinToString("-") { it.slug }}" },
+                            contentType = { "movie_row" }
                         ) { rowItems ->
                             Row(
                                 modifier = Modifier
@@ -618,6 +620,8 @@ private fun HeroFeaturedCard(
         AsyncImage(
             model = ImageRequest.Builder(context)
                 .data(if (!useHeroFallback) heroPrimary else heroFallback)
+                .size(960, 540)
+                .precision(Precision.INEXACT)
                 .crossfade(true)
                 .build(),
             contentDescription = movie.name,
@@ -817,7 +821,7 @@ private fun ContinueWatchingRail(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(entries, key = { it.slug }) { entry ->
+            items(entries, key = { it.slug }, contentType = { "continue_entry" }) { entry ->
                 val cardMovie = remember(entry) { entry.toMovieItem() }
                 var menuExpanded by remember { mutableStateOf(false) }
 
@@ -847,6 +851,8 @@ private fun ContinueWatchingRail(
                         AsyncImage(
                             model = ImageRequest.Builder(context)
                                 .data(entry.displayPosterUrl)
+                                .size(320, 190)
+                                .precision(Precision.INEXACT)
                                 .crossfade(true)
                                 .build(),
                             contentDescription = cardMovie.name,
@@ -942,7 +948,7 @@ private fun HorizontalMovieRail(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(11.dp)
         ) {
-            items(items, key = { it.slug }) { movie ->
+            items(items, key = { it.slug }, contentType = { "movie" }) { movie ->
                 MoviePosterCard(
                     movie = movie,
                     modifier = Modifier.width(cardWidth),

@@ -52,11 +52,27 @@ android {
         applicationId = "bond.maniakov.maniflix"
         minSdk = 24
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.0.6"
+        versionCode = 8
+        versionName = "1.1.0"
 
         vectorDrawables {
             useSupportLibrary = true
+        }
+    }
+
+    flavorDimensions += "device"
+    productFlavors {
+        create("mobile") {
+            dimension = "device"
+            applicationId = "bond.maniakov.maniflix"
+            resValue("string", "app_name", "ManiFlix")
+            buildConfigField("boolean", "IS_TV_BUILD", "false")
+        }
+        create("tv") {
+            dimension = "device"
+            applicationId = "bond.maniakov.maniflix.tv"
+            resValue("string", "app_name", "ManiFlix TV")
+            buildConfigField("boolean", "IS_TV_BUILD", "true")
         }
     }
 

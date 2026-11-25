@@ -261,7 +261,8 @@ fun SearchScreen(
         } else {
             items(
                 items = resultRows,
-                key = { row -> row.joinToString("-") { it.slug } }
+                key = { row -> row.joinToString("-") { it.slug } },
+                contentType = { "movie_row" }
             ) { rowItems ->
                 Row(
                     modifier = Modifier

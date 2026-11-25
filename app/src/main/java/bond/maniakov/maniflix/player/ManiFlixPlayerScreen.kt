@@ -7,6 +7,7 @@ import android.content.res.Configuration
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
+import android.view.KeyEvent as AndroidKeyEvent
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
@@ -17,6 +18,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -101,6 +103,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -109,6 +114,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -129,6 +137,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import bond.maniakov.maniflix.BuildConfig
 import bond.maniakov.maniflix.data.AppPreferences
 import bond.maniakov.maniflix.data.ExternalPlayerOption
 import bond.maniakov.maniflix.data.SoundProfileMode
@@ -169,8 +178,13 @@ fun ManiFlixPlayerScreen(
     var interactionNonce by remember { mutableStateOf(0) }
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
 
+    val isTvMode = BuildConfig.IS_TV_BUILD
+    val rootFocusRequester = remember { FocusRequester() }
+    val playPauseFocusRequester = remember { FocusRequester() }
+
     val supportsPiP = remember(context) {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+        !isTvMode &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             context.packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
     }
 
@@ -237,11 +251,150 @@ fun ManiFlixPlayerScreen(
         }
     }
 
+    LaunchedEffect(isInPiP, showControls, showEpisodeDrawer, showAudioDrawer) {
+        if (!isInPiP && !showEpisodeDrawer && !showAudioDrawer) {
+            if (showControls && isTvMode && !isLocked) {
+                runCatching { playPauseFocusRequester.requestFocus() }
+            } else {
+                runCatching { rootFocusRequester.requestFocus() }
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
             .onSizeChanged { containerSize = it }
+            .focusRequester(rootFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent { keyEvent ->
+                if (isInPiP || keyEvent.type != KeyEventType.KeyDown) {
+                    return@onPreviewKeyEvent false
+                }
+                val code = keyEvent.nativeKeyEvent.keyCode
+                when (code) {
+                    AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                        engine.togglePlayPause()
+                        showControls = true
+                        bumpAutoHide()
+                        true
+                    }
+                    AndroidKeyEvent.KEYCODE_MEDIA_PLAY -> {
+                        if (!engine.isPlaying) engine.togglePlayPause()
+                        showControls = true
+                        bumpAutoHide()
+                        true
+                    }
+                    AndroidKeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                        if (engine.isPlaying) engine.togglePlayPause()
+                        showControls = true
+                        bumpAutoHide()
+                        true
+                    }
+                    AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                        if (!isLocked) {
+                            val sec = AppPreferences.doubleTapSeekSeconds
+                            engine.seekRelative(sec.toDouble())
+                            triggerSeekPulse("+${sec}s")
+                            bumpAutoHide()
+                            true
+                        } else false
+                    }
+                    AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> {
+                        if (!isLocked) {
+                            val sec = AppPreferences.doubleTapSeekSeconds
+                            engine.seekRelative(-sec.toDouble())
+                            triggerSeekPulse("-${sec}s")
+                            bumpAutoHide()
+                            true
+                        } else false
+                    }
+                    AndroidKeyEvent.KEYCODE_CHANNEL_UP -> {
+                        if (!isLocked && engine.hasNextEpisode) {
+                            engine.nextEpisode()
+                            showControls = true
+                            bumpAutoHide()
+                            true
+                        } else false
+                    }
+                    AndroidKeyEvent.KEYCODE_CHANNEL_DOWN -> {
+                        if (!isLocked && engine.hasPreviousEpisode) {
+                            engine.previousEpisode()
+                            showControls = true
+                            bumpAutoHide()
+                            true
+                        } else false
+                    }
+                    AndroidKeyEvent.KEYCODE_BACK -> {
+                        when {
+                            showEpisodeDrawer -> { showEpisodeDrawer = false; true }
+                            showAudioDrawer -> { showAudioDrawer = false; true }
+                            isTvMode && showControls -> { showControls = false; true }
+                            else -> { handleClose(); true }
+                        }
+                    }
+                    else -> {
+                        if (showEpisodeDrawer || showAudioDrawer) {
+                            false
+                        } else if (!showControls) {
+                            when (code) {
+                                AndroidKeyEvent.KEYCODE_DPAD_CENTER,
+                                AndroidKeyEvent.KEYCODE_ENTER,
+                                AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                                    if (!isLocked && engine.activeSkipPrompt != null) {
+                                        engine.skipActiveMarker()
+                                        triggerSeekPulse("Đã bỏ qua")
+                                    } else if (!isLocked && engine.activeOutroPrompt != null) {
+                                        engine.handleOutroAction()
+                                    } else {
+                                        engine.togglePlayPause()
+                                        showControls = true
+                                        bumpAutoHide()
+                                    }
+                                    true
+                                }
+                                AndroidKeyEvent.KEYCODE_DPAD_LEFT -> {
+                                    if (!isLocked) {
+                                        val sec = AppPreferences.doubleTapSeekSeconds
+                                        engine.seekRelative(-sec.toDouble())
+                                        triggerSeekPulse("-${sec}s")
+                                        bumpAutoHide()
+                                        true
+                                    } else false
+                                }
+                                AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                    if (!isLocked) {
+                                        val sec = AppPreferences.doubleTapSeekSeconds
+                                        engine.seekRelative(sec.toDouble())
+                                        triggerSeekPulse("+${sec}s")
+                                        bumpAutoHide()
+                                        true
+                                    } else false
+                                }
+                                AndroidKeyEvent.KEYCODE_DPAD_UP,
+                                AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
+                                    showControls = true
+                                    bumpAutoHide()
+                                    true
+                                }
+                                else -> false
+                            }
+                        } else {
+                            if (code == AndroidKeyEvent.KEYCODE_DPAD_UP ||
+                                code == AndroidKeyEvent.KEYCODE_DPAD_DOWN ||
+                                code == AndroidKeyEvent.KEYCODE_DPAD_LEFT ||
+                                code == AndroidKeyEvent.KEYCODE_DPAD_RIGHT ||
+                                code == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
+                                code == AndroidKeyEvent.KEYCODE_ENTER
+                            ) {
+                                bumpAutoHide()
+                            }
+                            false
+                        }
+                    }
+                }
+            }
     ) {
         // Video surface (pure video in PiP, aspect & flip bound)
         val explicitRatio = engine.aspectMode.explicitRatio
@@ -794,7 +947,8 @@ fun ManiFlixPlayerScreen(
                             GlassCircleButton(
                                 icon = if (engine.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                                 contentDescription = if (engine.isPlaying) "Tạm dừng" else "Phát",
-                                size = 64.dp
+                                size = 64.dp,
+                                modifier = Modifier.focusRequester(playPauseFocusRequester)
                             ) {
                                 engine.togglePlayPause()
                                 bumpAutoHide()
@@ -1357,12 +1511,23 @@ private fun GlassPill(
     onClick: (() -> Unit)? = null,
     content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
 ) {
+    var isFocused by remember { mutableStateOf(false) }
     val pillModifier = modifier
         .clip(CircleShape)
-        .background(Color(0xA6141418))
-        .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
+        .background(if (isFocused && clickable) Color(0xCC24242C) else Color(0xA6141418))
+        .border(
+            width = if (isFocused && clickable) 2.dp else 1.dp,
+            color = if (isFocused && clickable) Color.White else Color.White.copy(alpha = 0.16f),
+            shape = CircleShape
+        )
         .let { base ->
-            if (clickable && onClick != null) base.clickable(onClick = onClick) else base
+            if (clickable && onClick != null) {
+                base
+                    .onFocusChanged { isFocused = it.isFocused }
+                    .clickable(onClick = onClick)
+            } else {
+                base
+            }
         }
         .padding(horizontal = horizontalPadding, vertical = 7.dp)
 
@@ -1378,14 +1543,21 @@ private fun GlassCircleButton(
     icon: ImageVector,
     contentDescription: String,
     size: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    var isFocused by remember { mutableStateOf(false) }
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(Color(0xA6141418))
-            .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
+            .background(if (isFocused) Color(0xCC282834) else Color(0xA6141418))
+            .border(
+                width = if (isFocused) 2.dp else 1.dp,
+                color = if (isFocused) Color.White else Color.White.copy(alpha = 0.16f),
+                shape = CircleShape
+            )
+            .onFocusChanged { isFocused = it.isFocused }
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {

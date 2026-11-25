@@ -62,6 +62,7 @@ import bond.maniakov.maniflix.player.PlayerEngine
 import bond.maniakov.maniflix.ui.theme.ManiFlixColors
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import coil.size.Precision
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -181,7 +182,7 @@ fun LibraryScreen(
                                 )
                             }
                         } else {
-                            items(AppState.history, key = { it.slug }) { entry ->
+                            items(AppState.history, key = { it.slug }, contentType = { "history_item" }) { entry ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -194,6 +195,8 @@ fun LibraryScreen(
                                     AsyncImage(
                                         model = ImageRequest.Builder(context)
                                             .data(entry.displayPosterUrl)
+                                            .size(240, 145)
+                                            .precision(Precision.INEXACT)
                                             .crossfade(true)
                                             .build(),
                                         contentDescription = entry.name.ifBlank { entry.slug },
@@ -328,7 +331,8 @@ fun LibraryScreen(
                         ) {
                             items(
                                 items = favRows,
-                                key = { row -> row.joinToString("-") { it.slug } }
+                                key = { row -> row.joinToString("-") { it.slug } },
+                                contentType = { "movie_row" }
                             ) { rowItems ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -373,7 +377,7 @@ fun LibraryScreen(
                             ),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(AppState.blockedMovies, key = { it.slug }) { item ->
+                            items(AppState.blockedMovies, key = { it.slug }, contentType = { "blocked_item" }) { item ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -386,6 +390,8 @@ fun LibraryScreen(
                                     AsyncImage(
                                         model = ImageRequest.Builder(context)
                                             .data(item.displayPosterUrl)
+                                            .size(160, 220)
+                                            .precision(Precision.INEXACT)
                                             .crossfade(true)
                                             .build(),
                                         contentDescription = item.name,

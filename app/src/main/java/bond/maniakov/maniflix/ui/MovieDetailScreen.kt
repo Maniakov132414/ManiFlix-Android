@@ -72,6 +72,7 @@ import bond.maniakov.maniflix.model.MovieItem
 import bond.maniakov.maniflix.ui.theme.ManiFlixColors
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import coil.size.Precision
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -504,6 +505,8 @@ private fun DetailHeroHeader(
         AsyncImage(
             model = ImageRequest.Builder(context)
                 .data(heroArtworkUrl)
+                .size(320, 480)
+                .precision(Precision.INEXACT)
                 .crossfade(true)
                 .build(),
             contentDescription = detail?.name ?: seedMovie?.name,
@@ -968,7 +971,7 @@ private fun DetailRelatedRail(
             contentPadding = PaddingValues(horizontal = horizontalPadding),
             horizontalArrangement = Arrangement.spacedBy(11.dp)
         ) {
-            items(relatedMovies, key = { it.slug }) { related ->
+            items(relatedMovies, key = { it.slug }, contentType = { "movie" }) { related ->
                 MoviePosterCard(
                     movie = related,
                     modifier = Modifier.width(cardWidth),
