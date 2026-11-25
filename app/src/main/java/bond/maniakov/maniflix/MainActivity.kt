@@ -22,13 +22,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -47,6 +45,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -105,6 +104,25 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             ManiFlixTheme {
+                val isLight = ManiFlixColors.isLight()
+                val isPlayerActive = AppState.isPlayerPresented && PlayerSessionHolder.activeEngine != null
+                DisposableEffect(isLight, isPlayerActive) {
+                    val lightBars = isLight && !isPlayerActive
+                    enableEdgeToEdge(
+                        statusBarStyle = if (lightBars) {
+                            SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+                        } else {
+                            SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+                        },
+                        navigationBarStyle = if (lightBars) {
+                            SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+                        } else {
+                            SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+                        }
+                    )
+                    onDispose {}
+                }
+
                 RootScaffold(
                     onEnterPiP = { enterPiPMode() },
                     onClosePlayer = { closeInternalPlayer() }
@@ -213,16 +231,19 @@ private fun RootScaffold(
         detailStack.removeAt(detailStack.lastIndex)
     }
 
-    val oled = AppPreferences.oledBlackEnabled
+    val bg = ManiFlixColors.background()
+    val surface = ManiFlixColors.surface()
     val accent = ManiFlixColors.accent()
+    val textPrimary = ManiFlixColors.textPrimary()
+    val textSecondary = ManiFlixColors.textSecondary()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(ManiFlixColors.background(oled))
+            .background(bg)
     ) {
         Scaffold(
-            containerColor = ManiFlixColors.background(oled),
+            containerColor = bg,
             bottomBar = {
                 if (!isPlayerOverlayVisible && !isPiP) {
                     Column(modifier = Modifier.fillMaxWidth()) {
@@ -238,7 +259,7 @@ private fun RootScaffold(
                         }
 
                         NavigationBar(
-                            containerColor = ManiFlixColors.surface(oled).copy(alpha = 0.96f),
+                            containerColor = surface.copy(alpha = 0.96f),
                             tonalElevation = 0.dp
                         ) {
                             MainTab.entries.forEach { tab ->
@@ -246,12 +267,8 @@ private fun RootScaffold(
                                 NavigationBarItem(
                                     selected = selected,
                                     onClick = {
-                                        if (selectedTab == tab) {
-                                            detailStack.clear()
-                                        } else {
-                                            selectedTab = tab
-                                            detailStack.clear()
-                                        }
+                                        selectedTab = tab
+                                        detailStack.clear()
                                     },
                                     icon = {
                                         Icon(
@@ -263,15 +280,16 @@ private fun RootScaffold(
                                         Text(
                                             text = tab.label,
                                             fontSize = 11.sp,
-                                            maxLines = 1
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     },
                                     colors = NavigationBarItemDefaults.colors(
                                         selectedIconColor = accent,
                                         selectedTextColor = accent,
                                         indicatorColor = accent.copy(alpha = 0.16f),
-                                        unselectedIconColor = Color(0xFF8E8E93),
-                                        unselectedTextColor = Color(0xFF8E8E93)
+                                        unselectedIconColor = textSecondary,
+                                        unselectedTextColor = textSecondary
                                     )
                                 )
                             }
@@ -353,15 +371,15 @@ private fun RootScaffold(
             Box(
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(Color(0xE6222226))
-                    .border(0.6.dp, Color.White.copy(alpha = 0.16f), CircleShape)
+                    .background(ManiFlixColors.surfaceElevated().copy(alpha = 0.96f))
+                    .border(0.7.dp, ManiFlixColors.cardBorder(), CircleShape)
                     .padding(horizontal = 16.dp, vertical = 9.dp)
             ) {
                 Text(
                     text = AppState.globalBannerMessage.orEmpty(),
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
+                    color = textPrimary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -396,6 +414,8 @@ private fun MiniPlayerBar(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val textPrimary = ManiFlixColors.textPrimary()
+    val textSecondary = ManiFlixColors.textSecondary()
 
     Row(
         modifier = modifier
@@ -415,7 +435,7 @@ private fun MiniPlayerBar(
             modifier = Modifier
                 .size(40.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color.White.copy(alpha = 0.08f))
+                .background(ManiFlixColors.surfaceElevated())
         )
 
         Column(
@@ -426,14 +446,14 @@ private fun MiniPlayerBar(
                 text = engine.movie.name,
                 fontSize = 13.5.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White,
+                color = textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = engine.currentEpisode?.name?.takeIf { it.isNotBlank() } ?: "Đang phát",
                 fontSize = 11.5.sp,
-                color = Color(0xFFA0A0A8),
+                color = textSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -446,7 +466,7 @@ private fun MiniPlayerBar(
             Icon(
                 imageVector = if (engine.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                 contentDescription = if (engine.isPlaying) "Tạm dừng" else "Phát",
-                tint = Color.White
+                tint = textPrimary
             )
         }
 
@@ -457,7 +477,7 @@ private fun MiniPlayerBar(
             Icon(
                 imageVector = Icons.Rounded.Close,
                 contentDescription = "Đóng trình phát",
-                tint = Color(0xFFB4B4BC),
+                tint = textSecondary,
                 modifier = Modifier.size(18.dp)
             )
         }

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -39,7 +38,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -64,8 +62,12 @@ fun SearchScreen(
     val haptic = LocalHapticFeedback.current
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
-    val oled = AppPreferences.oledBlackEnabled
     val accent = ManiFlixColors.accent()
+    val bgColor = ManiFlixColors.background()
+    val textPrimary = ManiFlixColors.textPrimary()
+    val textSecondary = ManiFlixColors.textSecondary()
+    val borderColor = ManiFlixColors.cardBorder()
+    val isLight = ManiFlixColors.isLight()
 
     var query by rememberSaveable { mutableStateOf("") }
     var results by remember { mutableStateOf<List<MovieItem>>(emptyList()) }
@@ -116,7 +118,7 @@ fun SearchScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(ManiFlixColors.background(oled)),
+            .background(bgColor),
         contentPadding = PaddingValues(bottom = bottomContentPadding),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -132,7 +134,7 @@ fun SearchScreen(
                     text = "Tìm kiếm",
                     fontSize = 30.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = textPrimary
                 )
 
                 OutlinedTextField(
@@ -141,7 +143,7 @@ fun SearchScreen(
                     placeholder = {
                         Text(
                             text = "Tên phim, diễn viên...",
-                            color = Color(0xFF8E8E93),
+                            color = textSecondary,
                             fontSize = 14.sp
                         )
                     },
@@ -149,7 +151,7 @@ fun SearchScreen(
                         Icon(
                             imageVector = Icons.Rounded.Search,
                             contentDescription = null,
-                            tint = Color(0xFF8E8E93)
+                            tint = textSecondary
                         )
                     },
                     trailingIcon = {
@@ -158,7 +160,7 @@ fun SearchScreen(
                                 Icon(
                                     imageVector = Icons.Rounded.Close,
                                     contentDescription = "Xoá từ khoá",
-                                    tint = Color(0xFFAEAEB4)
+                                    tint = textSecondary
                                 )
                             }
                         }
@@ -173,13 +175,13 @@ fun SearchScreen(
                     ),
                     shape = RoundedCornerShape(14.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
+                        focusedTextColor = textPrimary,
+                        unfocusedTextColor = textPrimary,
                         cursorColor = accent,
                         focusedBorderColor = accent,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.14f),
-                        focusedContainerColor = Color.White.copy(alpha = 0.06f),
-                        unfocusedContainerColor = Color.White.copy(alpha = 0.05f)
+                        unfocusedBorderColor = borderColor,
+                        focusedContainerColor = ManiFlixColors.surface(),
+                        unfocusedContainerColor = ManiFlixColors.surface()
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -192,10 +194,11 @@ fun SearchScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(quickTopics, key = { it }) { topic ->
+                    val highlighted = query.equals(topic, ignoreCase = true)
                     Box(
                         modifier = appleGlassSurfaceModifier(
                             cornerRadius = 50.dp,
-                            highlighted = query.equals(topic, ignoreCase = true)
+                            highlighted = highlighted
                         )
                             .clickable {
                                 triggerHaptic(haptic)
@@ -209,7 +212,8 @@ fun SearchScreen(
                             text = topic,
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.Medium,
-                            color = Color.White
+                            color = if (highlighted && isLight) accent else textPrimary,
+                            maxLines = 1
                         )
                     }
                 }
@@ -224,7 +228,7 @@ fun SearchScreen(
                         .padding(vertical = 56.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.5.dp)
+                    CircularProgressIndicator(color = accent, strokeWidth = 2.5.dp)
                 }
             }
         } else if (visibleResults.isEmpty()) {
@@ -239,7 +243,7 @@ fun SearchScreen(
                     Icon(
                         imageVector = Icons.Rounded.Search,
                         contentDescription = null,
-                        tint = Color(0xFF727278),
+                        tint = textSecondary,
                         modifier = Modifier.size(34.dp)
                     )
                     Text(
@@ -249,7 +253,7 @@ fun SearchScreen(
                             "Tìm theo tên phim, tên gốc hoặc diễn viên"
                         },
                         fontSize = 14.sp,
-                        color = Color(0xFF8E8E93),
+                        color = textSecondary,
                         textAlign = TextAlign.Center
                     )
                 }

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -60,7 +61,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import bond.maniakov.maniflix.data.AppPreferences
 import bond.maniakov.maniflix.data.AppState
 import bond.maniakov.maniflix.data.ManiFlixApi
 import bond.maniakov.maniflix.model.EpisodeServer
@@ -84,12 +84,17 @@ fun MovieDetailScreen(
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
-    val oled = AppPreferences.oledBlackEnabled
     val accent = ManiFlixColors.accent()
+    val bgColor = ManiFlixColors.background()
+    val textPrimary = ManiFlixColors.textPrimary()
+    val textSecondary = ManiFlixColors.textSecondary()
+    val borderColor = ManiFlixColors.cardBorder()
+    val isLight = ManiFlixColors.isLight()
 
     var detail by remember(slug) { mutableStateOf<MovieDetail?>(null) }
     var servers by remember(slug) { mutableStateOf<List<EpisodeServer>>(emptyList()) }
     var franchiseSeasons by remember(slug) { mutableStateOf<List<FranchiseSeason>>(emptyList()) }
+    var relatedMovies by remember(slug) { mutableStateOf<List<MovieItem>>(emptyList()) }
     var selectedServerIdx by remember(slug) { mutableIntStateOf(0) }
     var isFranchiseExpanded by remember(slug) { mutableStateOf(true) }
     var isLoading by remember(slug) { mutableStateOf(true) }
@@ -103,13 +108,27 @@ fun MovieDetailScreen(
             val result = ManiFlixApi.fetchMovieDetail(slug)
             detail = result.movie
             servers = result.episodes
-            if (result.movie == null) {
+            val loadedMovie = result.movie
+            if (loadedMovie == null) {
                 errorMsg = "Không tìm thấy thông tin phim."
             } else {
-                val franchise = runCatching {
-                    ManiFlixApi.fetchFranchise(slug, result.movie?.name.orEmpty())
-                }.getOrNull()
-                franchiseSeasons = franchise.orEmpty()
+                franchiseSeasons = runCatching {
+                    ManiFlixApi.fetchFranchise(slug, loadedMovie.name)
+                }.getOrNull().orEmpty()
+
+                val firstCatSlug = loadedMovie.category.firstOrNull { it.slug.isNotBlank() }?.slug
+                val candidateList = runCatching {
+                    if (firstCatSlug != null) {
+                        ManiFlixApi.fetchCategory(firstCatSlug, 1)
+                    } else {
+                        ManiFlixApi.fetchMovies(1)
+                    }
+                }.getOrNull().orEmpty().ifEmpty {
+                    runCatching { ManiFlixApi.fetchMovies(1) }.getOrNull().orEmpty()
+                }
+                relatedMovies = candidateList
+                    .filter { it.slug != slug && !AppState.isBlocked(it.slug) }
+                    .take(12)
             }
         } catch (t: Throwable) {
             errorMsg = t.localizedMessage ?: "Không thể tải thông tin phim."
@@ -128,11 +147,10 @@ fun MovieDetailScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(ManiFlixColors.background(oled))
+            .background(bgColor)
     ) {
         AmbientArtworkBackground(
             imageUrl = heroArtworkUrl,
-            oled = oled,
             height = 420.dp
         )
 
@@ -154,12 +172,15 @@ fun MovieDetailScreen(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.42f))
+                        .background(
+                            if (isLight) ManiFlixColors.surface().copy(alpha = 0.85f)
+                            else Color.Black.copy(alpha = 0.42f)
+                        )
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                         contentDescription = "Quay lại",
-                        tint = Color.White
+                        tint = textPrimary
                     )
                 }
             }
@@ -182,8 +203,8 @@ fun MovieDetailScreen(
                     modifier = Modifier
                         .size(width = 158.dp, height = 228.dp)
                         .clip(posterShape)
-                        .background(Color.White.copy(alpha = 0.06f))
-                        .border(0.7.dp, Color.White.copy(alpha = 0.18f), posterShape)
+                        .background(ManiFlixColors.surfaceElevated())
+                        .border(0.7.dp, borderColor, posterShape)
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -192,7 +213,7 @@ fun MovieDetailScreen(
                     text = detail?.name ?: seedMovie?.name ?: "",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = textPrimary,
                     textAlign = TextAlign.Center,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
@@ -206,7 +227,7 @@ fun MovieDetailScreen(
                     Text(
                         text = originName,
                         fontSize = 14.sp,
-                        color = Color(0xFFB8B8C0),
+                        color = textSecondary,
                         textAlign = TextAlign.Center,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -225,7 +246,7 @@ fun MovieDetailScreen(
                         text = metaParts.joinToString(" • "),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
-                        color = Color(0xFF98989F)
+                        color = textSecondary
                     )
                 }
             }
@@ -239,367 +260,447 @@ fun MovieDetailScreen(
                         .padding(vertical = 32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.5.dp)
+                    CircularProgressIndicator(color = accent, strokeWidth = 2.5.dp)
                 }
             } else if (errorMsg != null) {
                 Text(
                     text = errorMsg ?: "",
                     fontSize = 14.sp,
-                    color = Color(0xFFA0A0A8),
+                    color = textSecondary,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
             } else {
                 detail?.let { movie ->
-                val activeEpisodes = servers.getOrNull(selectedServerIdx)?.serverData.orEmpty()
-                val targetIdx = resumeEntry?.episodeIndex
-                    ?.takeIf { it in activeEpisodes.indices }
-                    ?: 0
-                val playLabel = if (
-                    resumeEntry != null &&
-                    resumeEntry.episodeName.isNotBlank() &&
-                    targetIdx in activeEpisodes.indices
-                ) {
-                    "Xem tiếp • ${resumeEntry.episodeName}"
-                } else {
-                    "Phát"
-                }
+                    val activeEpisodes = servers.getOrNull(selectedServerIdx)?.serverData.orEmpty()
+                    val targetIdx = resumeEntry?.episodeIndex
+                        ?.takeIf { it in activeEpisodes.indices }
+                        ?: 0
+                    val playLabel = if (
+                        resumeEntry != null &&
+                        resumeEntry.episodeName.isNotBlank() &&
+                        targetIdx in activeEpisodes.indices
+                    ) {
+                        "Xem tiếp • ${resumeEntry.episodeName}"
+                    } else {
+                        "Phát"
+                    }
 
-                val menuMovie = remember(movie) { movie.toMovieItem() }
-                val isFav = AppState.isFavorite(movie.slug)
+                    val menuMovie = remember(movie) { movie.toMovieItem() }
+                    val isFav = AppState.isFavorite(movie.slug)
 
-                // Action Buttons Row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Button(
-                        onClick = {
-                            triggerHaptic(haptic)
-                            AppState.startPlayback(
-                                context = context,
-                                movie = movie,
-                                servers = servers,
-                                serverIndex = selectedServerIdx,
-                                episodeIndex = targetIdx
-                            )
-                        },
-                        enabled = activeEpisodes.isNotEmpty(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = accent,
-                            disabledContainerColor = accent.copy(alpha = 0.35f)
-                        ),
+                    // Action Buttons Row
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.PlayArrow,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = playLabel,
-                            fontSize = 14.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = appleGlassSurfaceModifier(cornerRadius = 12.dp)
-                            .size(46.dp)
-                            .clickable {
+                        Button(
+                            onClick = {
                                 triggerHaptic(haptic)
-                                scope.launch { AppState.toggleFavorite(movie) }
-                            }
-                    ) {
-                        Icon(
-                            imageVector = if (isFav) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
-                            contentDescription = "Lưu tủ phim",
-                            tint = if (isFav) accent else Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                                AppState.startPlayback(
+                                    context = context,
+                                    movie = movie,
+                                    servers = servers,
+                                    serverIndex = selectedServerIdx,
+                                    episodeIndex = targetIdx
+                                )
+                            },
+                            enabled = activeEpisodes.isNotEmpty(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = accent,
+                                disabledContainerColor = accent.copy(alpha = 0.35f)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = playLabel,
+                                fontSize = 14.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
 
-                    Box {
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = appleGlassSurfaceModifier(cornerRadius = 12.dp)
                                 .size(46.dp)
                                 .clickable {
                                     triggerHaptic(haptic)
-                                    menuExpanded = true
+                                    scope.launch { AppState.toggleFavorite(movie) }
                                 }
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.MoreHoriz,
-                                contentDescription = "Thêm tuỳ chọn",
-                                tint = Color.White,
-                                modifier = Modifier.size(22.dp)
+                                imageVector = if (isFav) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
+                                contentDescription = "Lưu tủ phim",
+                                tint = if (isFav) accent else textPrimary,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
 
-                        MovieContextDropdownMenu(
-                            movie = menuMovie,
-                            expanded = menuExpanded,
-                            onDismiss = { menuExpanded = false }
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Metadata Pills
-                val pills = buildList {
-                    movie.quality.takeIf { it.isNotBlank() }?.let { add(it) }
-                    movie.episodeCurrent.takeIf { it.isNotBlank() }?.let { add(it) }
-                    movie.category.take(5).forEach { tag ->
-                        tag.name.takeIf { it.isNotBlank() }?.let { add(it) }
-                    }
-                }
-                if (pills.isNotEmpty()) {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp)
-                    ) {
-                        itemsIndexed(pills) { _, pill ->
-                            Text(
-                                text = pill,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFFDADAE0),
-                                modifier = appleGlassSurfaceModifier(cornerRadius = 50.dp)
-                                    .padding(horizontal = 11.dp, vertical = 5.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-
-                // Collapsible Multi-line Wrapping Franchise Section
-                if (franchiseSeasons.size > 1) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .then(appleGlassSurfaceModifier(cornerRadius = 14.dp))
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    isFranchiseExpanded = !isFranchiseExpanded
-                                    triggerHaptic(haptic)
-                                },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Các phần phim (${franchiseSeasons.size})",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            Text(
-                                text = if (isFranchiseExpanded) "Thu gọn" else "Mở rộng",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFFA6A6AC)
-                            )
-
-                            Spacer(modifier = Modifier.width(4.dp))
-
-                            Icon(
-                                imageVector = if (isFranchiseExpanded) {
-                                    Icons.Rounded.KeyboardArrowUp
-                                } else {
-                                    Icons.Rounded.KeyboardArrowDown
-                                },
-                                contentDescription = null,
-                                tint = accent,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        AnimatedVisibility(visible = isFranchiseExpanded) {
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                franchiseSeasons.forEach { season ->
-                                    val isCurrent = season.slug == slug
-                                    val chipShape = RoundedCornerShape(10.dp)
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(chipShape)
-                                            .background(
-                                                if (isCurrent) accent.copy(alpha = 0.28f)
-                                                else Color.White.copy(alpha = 0.08f)
-                                            )
-                                            .border(
-                                                width = if (isCurrent) 1.2.dp else 0.6.dp,
-                                                color = if (isCurrent) accent else Color.White.copy(alpha = 0.14f),
-                                                shape = chipShape
-                                            )
-                                            .clickable {
-                                                if (!isCurrent) {
-                                                    triggerHaptic(haptic)
-                                                    onSelectMovie(season.slug, null)
-                                                }
-                                            }
-                                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                                    ) {
-                                        Text(
-                                            text = season.displayFullTitle,
-                                            fontSize = 12.5.sp,
-                                            fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Medium,
-                                            color = Color.White
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-
-                // Server Selector + Episode Grid
-                if (servers.isNotEmpty()) {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        itemsIndexed(servers) { idx, srv ->
-                            val selected = selectedServerIdx == idx
+                        Box {
                             Box(
-                                modifier = appleGlassSurfaceModifier(
-                                    cornerRadius = 50.dp,
-                                    highlighted = selected
-                                )
+                                contentAlignment = Alignment.Center,
+                                modifier = appleGlassSurfaceModifier(cornerRadius = 12.dp)
+                                    .size(46.dp)
                                     .clickable {
-                                        selectedServerIdx = idx
                                         triggerHaptic(haptic)
+                                        menuExpanded = true
                                     }
-                                    .padding(horizontal = 13.dp, vertical = 7.dp)
                             ) {
-                                Text(
-                                    text = srv.serverName,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                                    color = Color.White
+                                Icon(
+                                    imageVector = Icons.Rounded.MoreHoriz,
+                                    contentDescription = "Thêm tuỳ chọn",
+                                    tint = textPrimary,
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
+
+                            MovieContextDropdownMenu(
+                                movie = menuMovie,
+                                expanded = menuExpanded,
+                                onDismiss = { menuExpanded = false }
+                            )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    val activeServer = servers.getOrNull(selectedServerIdx)
-                    if (activeServer != null) {
-                        Text(
-                            text = "Danh sách tập (${activeServer.serverData.size})",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
+                    // Metadata Pills (Quality, Episode, Countries, Categories)
+                    val pills = buildList {
+                        movie.quality.takeIf { it.isNotBlank() }?.let { add(it) }
+                        movie.episodeCurrent.takeIf { it.isNotBlank() }?.let { add(it) }
+                        movie.country.take(3).forEach { c ->
+                            c.name.takeIf { it.isNotBlank() }?.let { add(it) }
+                        }
+                        movie.category.take(5).forEach { tag ->
+                            tag.name.takeIf { it.isNotBlank() }?.let { add(it) }
+                        }
+                    }.distinct()
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                    if (pills.isNotEmpty()) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(7.dp)
+                        ) {
+                            itemsIndexed(pills) { _, pill ->
+                                Text(
+                                    text = pill,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = textPrimary,
+                                    modifier = appleGlassSurfaceModifier(cornerRadius = 50.dp)
+                                        .padding(horizontal = 11.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
 
-                        val watchedEpIdx = resumeEntry?.episodeIndex
-                        val rows = activeServer.serverData.chunked(4)
+                    // Collapsible Multi-line Wrapping Franchise Section
+                    if (franchiseSeasons.size > 1) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                .padding(horizontal = 16.dp)
+                                .then(appleGlassSurfaceModifier(cornerRadius = 14.dp))
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            var runningIndex = 0
-                            rows.forEach { rowEpisodes ->
-                                Row(
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        isFranchiseExpanded = !isFranchiseExpanded
+                                        triggerHaptic(haptic)
+                                    },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Các phần phim (${franchiseSeasons.size})",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = textPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                Text(
+                                    text = if (isFranchiseExpanded) "Thu gọn" else "Mở rộng",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = textSecondary
+                                )
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                Icon(
+                                    imageVector = if (isFranchiseExpanded) {
+                                        Icons.Rounded.KeyboardArrowUp
+                                    } else {
+                                        Icons.Rounded.KeyboardArrowDown
+                                    },
+                                    contentDescription = null,
+                                    tint = accent,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            AnimatedVisibility(visible = isFranchiseExpanded) {
+                                FlowRow(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    rowEpisodes.forEach { ep ->
-                                        val epIdx = runningIndex++
-                                        val isWatchedEp = watchedEpIdx == epIdx
+                                    franchiseSeasons.forEach { season ->
+                                        val isCurrent = season.slug == slug
                                         Box(
-                                            contentAlignment = Alignment.Center,
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .then(
-                                                    appleGlassSurfaceModifier(
-                                                        cornerRadius = 9.dp,
-                                                        highlighted = isWatchedEp
-                                                    )
-                                                )
+                                            modifier = appleGlassSurfaceModifier(
+                                                cornerRadius = 10.dp,
+                                                highlighted = isCurrent
+                                            )
                                                 .clickable {
-                                                    triggerHaptic(haptic)
-                                                    AppState.startPlayback(
-                                                        context = context,
-                                                        movie = movie,
-                                                        servers = servers,
-                                                        serverIndex = selectedServerIdx,
-                                                        episodeIndex = epIdx
-                                                    )
+                                                    if (!isCurrent) {
+                                                        triggerHaptic(haptic)
+                                                        onSelectMovie(season.slug, null)
+                                                    }
                                                 }
-                                                .padding(horizontal = 6.dp, vertical = 10.dp)
+                                                .padding(horizontal = 12.dp, vertical = 8.dp)
                                         ) {
                                             Text(
-                                                text = ep.name,
-                                                fontSize = 12.sp,
-                                                fontWeight = if (isWatchedEp) FontWeight.SemiBold else FontWeight.Medium,
-                                                color = Color.White,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
+                                                text = season.displayFullTitle,
+                                                fontSize = 12.5.sp,
+                                                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Medium,
+                                                color = if (isCurrent && isLight) accent else textPrimary
                                             )
                                         }
                                     }
-                                    repeat(4 - rowEpisodes.size) {
-                                        Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    // Server Selector + Episode Grid
+                    if (servers.isNotEmpty()) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            itemsIndexed(servers) { idx, srv ->
+                                val selected = selectedServerIdx == idx
+                                Box(
+                                    modifier = appleGlassSurfaceModifier(
+                                        cornerRadius = 50.dp,
+                                        highlighted = selected
+                                    )
+                                        .clickable {
+                                            selectedServerIdx = idx
+                                            triggerHaptic(haptic)
+                                        }
+                                        .padding(horizontal = 13.dp, vertical = 7.dp)
+                                ) {
+                                    Text(
+                                        text = srv.serverName,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                        color = if (selected && isLight) accent else textPrimary
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        val activeServer = servers.getOrNull(selectedServerIdx)
+                        if (activeServer != null) {
+                            Text(
+                                text = "Danh sách tập (${activeServer.serverData.size})",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = textPrimary,
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            val watchedEpIdx = resumeEntry?.episodeIndex
+                            val rows = activeServer.serverData.chunked(4)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                var runningIndex = 0
+                                rows.forEach { rowEpisodes ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        rowEpisodes.forEach { ep ->
+                                            val epIdx = runningIndex++
+                                            val isWatchedEp = watchedEpIdx == epIdx
+                                            Box(
+                                                contentAlignment = Alignment.Center,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .then(
+                                                        appleGlassSurfaceModifier(
+                                                            cornerRadius = 9.dp,
+                                                            highlighted = isWatchedEp
+                                                        )
+                                                    )
+                                                    .clickable {
+                                                        triggerHaptic(haptic)
+                                                        AppState.startPlayback(
+                                                            context = context,
+                                                            movie = movie,
+                                                            servers = servers,
+                                                            serverIndex = selectedServerIdx,
+                                                            episodeIndex = epIdx
+                                                        )
+                                                    }
+                                                    .padding(horizontal = 6.dp, vertical = 10.dp)
+                                            ) {
+                                                Text(
+                                                    text = ep.name,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = if (isWatchedEp) FontWeight.SemiBold else FontWeight.Medium,
+                                                    color = if (isWatchedEp && isLight) accent else textPrimary,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                        repeat(4 - rowEpisodes.size) {
+                                            Spacer(modifier = Modifier.weight(1f))
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
 
-                if (movie.plainSynopsis.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(18.dp))
-                    Column(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "Giới thiệu",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = movie.plainSynopsis,
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            color = Color(0xFFC4C4CC)
-                        )
+                    // Synopsis
+                    if (movie.plainSynopsis.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(18.dp))
+                        Column(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Giới thiệu",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = textPrimary
+                            )
+                            Text(
+                                text = movie.plainSynopsis,
+                                fontSize = 14.sp,
+                                lineHeight = 20.sp,
+                                color = textSecondary
+                            )
+                        }
                     }
-                }
+
+                    // Director & Actor Details
+                    val directors = movie.director.filter { it.isNotBlank() }
+                    val actors = movie.actor.filter { it.isNotBlank() }
+                    if (directors.isNotEmpty() || actors.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .then(appleGlassSurfaceModifier(cornerRadius = 14.dp))
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (directors.isNotEmpty()) {
+                                DetailMetaLine(
+                                    label = "Đạo diễn",
+                                    value = directors.joinToString(", "),
+                                    textPrimary = textPrimary,
+                                    textSecondary = textSecondary
+                                )
+                            }
+                            if (actors.isNotEmpty()) {
+                                DetailMetaLine(
+                                    label = "Diễn viên",
+                                    value = actors.take(8).joinToString(", "),
+                                    textPrimary = textPrimary,
+                                    textSecondary = textSecondary
+                                )
+                            }
+                        }
+                    }
+
+                    // Related Movies Horizontal Rail
+                    if (relatedMovies.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(
+                                text = "Có thể bạn cũng thích",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = textPrimary,
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(11.dp)
+                            ) {
+                                items(relatedMovies, key = { it.slug }) { related ->
+                                    MoviePosterCard(
+                                        movie = related,
+                                        modifier = Modifier.width(120.dp),
+                                        onClick = { onSelectMovie(related.slug, related) }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DetailMetaLine(
+    label: String,
+    value: String,
+    textPrimary: Color,
+    textSecondary: Color
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = label,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = textSecondary
+        )
+        Text(
+            text = value,
+            fontSize = 13.5.sp,
+            color = textPrimary,
+            lineHeight = 18.sp
+        )
     }
 }

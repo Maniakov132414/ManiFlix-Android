@@ -15,6 +15,7 @@ import bond.maniakov.maniflix.model.HistoryEntry
 import bond.maniakov.maniflix.model.MovieDetail
 import bond.maniakov.maniflix.model.MovieItem
 import bond.maniakov.maniflix.model.UserInfo
+import bond.maniakov.maniflix.model.UserThemeConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -78,6 +79,7 @@ object AppState {
         try {
             val user = ManiFlixApi.fetchMe(token)
             currentUser = user
+            syncThemeConfig(user?.themeConfig)
             refreshLibrary()
         } catch (e: ApiHttpException) {
             if (e.statusCode == 401) {
@@ -107,8 +109,75 @@ object AppState {
     suspend fun handleAuthSuccess(token: String, user: UserInfo?) {
         authToken = token
         currentUser = user
+        syncThemeConfig(user?.themeConfig)
         showAuthSheet = false
         refreshLibrary()
+    }
+
+    fun syncThemeConfig(config: UserThemeConfig?) {
+        if (config == null) return
+        syncThemeConfig(
+            presetId = config.presetId,
+            accentHex = config.accent,
+            bgHex = config.bg,
+            surfaceHex = config.surface
+        )
+    }
+
+    fun syncThemeConfig(
+        presetId: String?,
+        accentHex: String?,
+        bgHex: String?,
+        surfaceHex: String?
+    ) {
+        val pid = presetId?.trim().orEmpty()
+        if (pid.isNotEmpty() && pid != "custom") {
+            val preset = THEME_PRESETS.firstOrNull { it.id == pid }
+            if (preset != null) {
+                AppPreferences.applyPreset(preset)
+                return
+            }
+        }
+        val nextAccent = AppPreferences.parseColorHex(accentHex, AppPreferences.customAccentHex)
+        val nextBg = AppPreferences.parseColorHex(bgHex, AppPreferences.customBgHex)
+        val nextSurface = AppPreferences.parseColorHex(surfaceHex, AppPreferences.customSurfaceHex)
+        if (!accentHex.isNullOrBlank() || !bgHex.isNullOrBlank() || !surfaceHex.isNullOrBlank()) {
+            AppPreferences.themeMode = ThemeMode.CUSTOM
+            AppPreferences.customAccentHex = nextAccent
+            AppPreferences.customBgHex = nextBg
+            AppPreferences.customSurfaceHex = nextSurface
+            AppPreferences.activePresetId = pid.ifBlank { "custom" }
+        }
+    }
+
+    suspend fun saveAndSyncTheme(presetId: String = AppPreferences.activePresetId) {
+        val token = authToken
+        if (token.isBlank()) {
+            showBanner("Đã lưu giao diện trên thiết bị")
+            return
+        }
+        val accentStr = AppPreferences.formatColorHex(AppPreferences.customAccentHex)
+        val bgStr = AppPreferences.formatColorHex(AppPreferences.customBgHex)
+        val surfaceStr = AppPreferences.formatColorHex(AppPreferences.customSurfaceHex)
+        val effectivePresetId = when (AppPreferences.themeMode) {
+            ThemeMode.CUSTOM -> presetId.ifBlank { "custom" }
+            else -> AppPreferences.activePresetId.ifBlank { AppPreferences.themeMode.name.lowercase() }
+        }
+        try {
+            val saved = ManiFlixApi.saveUserTheme(
+                token = token,
+                presetId = effectivePresetId,
+                accentHex = accentStr,
+                bgHex = bgStr,
+                surfaceHex = surfaceStr
+            )
+            if (saved != null) {
+                currentUser = currentUser?.copy(themeConfig = saved)
+            }
+            showBanner("Đã lưu & đồng bộ giao diện")
+        } catch (_: Exception) {
+            showBanner("Không thể đồng bộ giao diện lên máy chủ")
+        }
     }
 
     fun logout() {

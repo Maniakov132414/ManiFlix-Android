@@ -686,7 +686,7 @@ class PlayerEngine(
             SpatialAudioController.attachToAudioSession(appContext, sessionId)
         }
         if (showBanner) {
-            showToast(SpatialAudioController.activeSpatialSummary(appContext))
+            showToast(SpatialAudioController.activeAudioSummary(appContext))
         }
     }
 

@@ -9,14 +9,14 @@ import androidx.compose.runtime.setValue
 import bond.maniakov.maniflix.model.AndroidVersionConfig
 
 object UpdateManager {
-    const val currentVersion = "1.0.0"
-    const val currentBuild = "1"
+    const val currentVersion = "1.0.1"
+    const val currentBuild = "2"
     const val displayVersion = "$currentVersion ($currentBuild)"
 
     private const val PREFS_NAME = "maniflix_update"
     private const val KEY_SNOOZE_UNTIL = "update.softSnoozeUntil"
     private const val DEFAULT_ARM64_URL =
-        "https://github.com/Maniakov132414/ManiFlix-Android/releases/latest/download/ManiFlix-arm64.apk"
+        "https://github.com/Maniakov132414/ManiFlix-Android/releases/latest/download/ManiFlix.apk"
 
     private var prefs: SharedPreferences? = null
 

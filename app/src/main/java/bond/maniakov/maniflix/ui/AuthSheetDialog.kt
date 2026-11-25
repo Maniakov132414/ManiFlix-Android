@@ -1,6 +1,7 @@
 package bond.maniakov.maniflix.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -52,6 +54,11 @@ fun AuthSheetDialog(
 ) {
     val scope = rememberCoroutineScope()
     val accent = ManiFlixColors.accent()
+    val surface = ManiFlixColors.surface()
+    val surfaceElevated = ManiFlixColors.surfaceElevated()
+    val textPrimary = ManiFlixColors.textPrimary()
+    val textSecondary = ManiFlixColors.textSecondary()
+    val borderColor = ManiFlixColors.cardBorder()
 
     var isRegisterMode by remember { mutableStateOf(false) }
     var username by remember { mutableStateOf("") }
@@ -63,9 +70,11 @@ fun AuthSheetDialog(
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(20.dp),
-            color = Color(0xFF1A1A1E),
+            color = surface,
             tonalElevation = 8.dp,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(0.7.dp, borderColor, RoundedCornerShape(20.dp))
         ) {
             Column(
                 modifier = Modifier.padding(18.dp),
@@ -79,14 +88,16 @@ fun AuthSheetDialog(
                         text = "Tài khoản",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = onDismiss, modifier = Modifier.size(30.dp)) {
                         Icon(
                             imageVector = Icons.Rounded.Close,
                             contentDescription = "Đóng",
-                            tint = Color(0xFFAEAEB4)
+                            tint = textSecondary
                         )
                     }
                 }
@@ -100,10 +111,30 @@ fun AuthSheetDialog(
                             .padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        ProfileInfoRow("Tên hiển thị", currentUser.displayName.ifBlank { currentUser.username })
-                        ProfileInfoRow("Tên đăng nhập", "@${currentUser.username}")
-                        ProfileInfoRow("Lịch sử xem", "${AppState.history.size} phim")
-                        ProfileInfoRow("Phim đã lưu", "${AppState.favorites.size} phim")
+                        ProfileInfoRow(
+                            label = "Tên hiển thị",
+                            value = currentUser.displayName.ifBlank { currentUser.username },
+                            textPrimary = textPrimary,
+                            textSecondary = textSecondary
+                        )
+                        ProfileInfoRow(
+                            label = "Tên đăng nhập",
+                            value = "@${currentUser.username}",
+                            textPrimary = textPrimary,
+                            textSecondary = textSecondary
+                        )
+                        ProfileInfoRow(
+                            label = "Lịch sử xem",
+                            value = "${AppState.history.size} phim",
+                            textPrimary = textPrimary,
+                            textSecondary = textSecondary
+                        )
+                        ProfileInfoRow(
+                            label = "Phim đã lưu",
+                            value = "${AppState.favorites.size} phim",
+                            textPrimary = textPrimary,
+                            textSecondary = textSecondary
+                        )
                     }
 
                     Button(
@@ -149,7 +180,8 @@ fun AuthSheetDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White.copy(alpha = 0.08f))
+                            .background(surfaceElevated)
+                            .border(0.6.dp, borderColor, RoundedCornerShape(10.dp))
                             .padding(3.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
@@ -171,18 +203,21 @@ fun AuthSheetDialog(
                                     text = label,
                                     fontSize = 13.sp,
                                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                                    color = Color.White
+                                    color = if (selected) Color.White else textSecondary,
+                                    maxLines = 1
                                 )
                             }
                         }
                     }
 
                     val fieldColors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
+                        focusedTextColor = textPrimary,
+                        unfocusedTextColor = textPrimary,
                         cursorColor = accent,
                         focusedBorderColor = accent,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.16f)
+                        unfocusedBorderColor = borderColor,
+                        focusedLabelColor = accent,
+                        unfocusedLabelColor = textSecondary
                     )
 
                     OutlinedTextField(
@@ -286,12 +321,31 @@ fun AuthSheetDialog(
 }
 
 @Composable
-private fun ProfileInfoRow(label: String, value: String) {
+private fun ProfileInfoRow(
+    label: String,
+    value: String,
+    textPrimary: Color,
+    textSecondary: Color
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = label, fontSize = 13.sp, color = Color(0xFF98989F))
-        Text(text = value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color.White)
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = textSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = value,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }

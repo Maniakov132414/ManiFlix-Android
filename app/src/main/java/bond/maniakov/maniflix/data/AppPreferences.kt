@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
@@ -22,16 +23,70 @@ enum class SurfaceStyle(val title: String) {
     MINIMAL("Đơn giản")
 }
 
-enum class SpatialAudioMode(val title: String) {
-    AUTOMATIC("Tự động"),
-    CINEMA_WIDE("Không gian mở rộng"),
-    OFF("Tắt (Stereo)")
+enum class ThemeMode(val title: String) {
+    SYSTEM("Tự động"),
+    LIGHT("Sáng"),
+    DARK("Tối"),
+    OLED("Đen OLED"),
+    CUSTOM("Tuỳ chỉnh")
 }
 
+data class ThemePresetItem(
+    val id: String,
+    val name: String,
+    val mode: ThemeMode,
+    val accentHex: Long,
+    val bgHex: Long,
+    val surfaceHex: Long
+)
+
+val THEME_PRESETS: List<ThemePresetItem> = listOf(
+    ThemePresetItem(
+        id = "apple-dark",
+        name = "Apple Music Tối",
+        mode = ThemeMode.DARK,
+        accentHex = 0xFFFA2D48,
+        bgHex = 0xFF121214,
+        surfaceHex = 0xFF1C1C1E
+    ),
+    ThemePresetItem(
+        id = "pure-light",
+        name = "Trắng Tinh Khôi",
+        mode = ThemeMode.LIGHT,
+        accentHex = 0xFFFA2D48,
+        bgHex = 0xFFF4F4F7,
+        surfaceHex = 0xFFFFFFFF
+    ),
+    ThemePresetItem(
+        id = "midnight-indigo",
+        name = "Đêm Xanh Indigo",
+        mode = ThemeMode.CUSTOM,
+        accentHex = 0xFF5E5CE6,
+        bgHex = 0xFF0B1020,
+        surfaceHex = 0xFF151C32
+    ),
+    ThemePresetItem(
+        id = "forest-emerald",
+        name = "Rừng Ngọc Bích",
+        mode = ThemeMode.CUSTOM,
+        accentHex = 0xFF30D158,
+        bgHex = 0xFF0B1612,
+        surfaceHex = 0xFF14241D
+    ),
+    ThemePresetItem(
+        id = "snow-sky",
+        name = "Tuyết Sáng Indigo",
+        mode = ThemeMode.CUSTOM,
+        accentHex = 0xFF0A84FF,
+        bgHex = 0xFFF2F5FA,
+        surfaceHex = 0xFFFFFFFF
+    )
+)
+
 enum class SoundProfileMode(val title: String) {
-    CINEMA("Điện ảnh"),
+    STANDARD("Mặc định"),
     DIALOGUE("Rõ lời thoại"),
-    STANDARD("Mặc định")
+    BASS_BOOST("Tăng âm trầm")
 }
 
 enum class IntroSkipBehavior(val title: String) {
@@ -54,10 +109,14 @@ object AppPreferences {
     private const val KEY_ACCENT = "pref.accentPreset"
     private const val KEY_SURFACE = "pref.surfaceStyle"
     private const val KEY_OLED = "pref.oledBlack"
+    private const val KEY_THEME_MODE = "pref.themeMode"
+    private const val KEY_CUSTOM_ACCENT = "pref.customAccentHex"
+    private const val KEY_CUSTOM_BG = "pref.customBgHex"
+    private const val KEY_CUSTOM_SURFACE = "pref.customSurfaceHex"
+    private const val KEY_ACTIVE_PRESET = "pref.activePresetId"
     private const val KEY_AMBIENT = "pref.ambientArtwork"
     private const val KEY_GRID_COLS = "pref.gridColumnsPhone"
     private const val KEY_HAPTICS = "pref.hapticsEnabled"
-    private const val KEY_SPATIAL = "pref.spatialAudioMode"
     private const val KEY_SOUND_PROFILE = "pref.soundProfile"
     private const val KEY_COMFORT_GAIN = "pref.comfortGain"
     private const val KEY_AUTO_PIP = "pref.autoPiP"
@@ -76,7 +135,11 @@ object AppPreferences {
         get() = _accentPreset
         set(value) {
             _accentPreset = value
-            prefs?.edit()?.putString(KEY_ACCENT, value.name)?.apply()
+            _customAccentHex = value.colorHex
+            prefs?.edit()
+                ?.putString(KEY_ACCENT, value.name)
+                ?.putLong(KEY_CUSTOM_ACCENT, value.colorHex)
+                ?.apply()
         }
 
     private var _surfaceStyle by mutableStateOf(SurfaceStyle.ADAPTIVE)
@@ -87,13 +150,54 @@ object AppPreferences {
             prefs?.edit()?.putString(KEY_SURFACE, value.name)?.apply()
         }
 
-    private var _oledBlackEnabled by mutableStateOf(false)
-    var oledBlackEnabled: Boolean
-        get() = _oledBlackEnabled
+    private var _themeMode by mutableStateOf(ThemeMode.DARK)
+    var themeMode: ThemeMode
+        get() = _themeMode
         set(value) {
-            _oledBlackEnabled = value
-            prefs?.edit()?.putBoolean(KEY_OLED, value)?.apply()
+            _themeMode = value
+            prefs?.edit()
+                ?.putString(KEY_THEME_MODE, value.name)
+                ?.putBoolean(KEY_OLED, value == ThemeMode.OLED)
+                ?.apply()
         }
+
+    private var _customAccentHex by mutableLongStateOf(0xFFFA2D48)
+    var customAccentHex: Long
+        get() = _customAccentHex
+        set(value) {
+            val opaque = value or 0xFF000000L
+            _customAccentHex = opaque
+            prefs?.edit()?.putLong(KEY_CUSTOM_ACCENT, opaque)?.apply()
+        }
+
+    private var _customBgHex by mutableLongStateOf(0xFF121214)
+    var customBgHex: Long
+        get() = _customBgHex
+        set(value) {
+            val opaque = value or 0xFF000000L
+            _customBgHex = opaque
+            prefs?.edit()?.putLong(KEY_CUSTOM_BG, opaque)?.apply()
+        }
+
+    private var _customSurfaceHex by mutableLongStateOf(0xFF1C1C1E)
+    var customSurfaceHex: Long
+        get() = _customSurfaceHex
+        set(value) {
+            val opaque = value or 0xFF000000L
+            _customSurfaceHex = opaque
+            prefs?.edit()?.putLong(KEY_CUSTOM_SURFACE, opaque)?.apply()
+        }
+
+    private var _activePresetId by mutableStateOf("apple-dark")
+    var activePresetId: String
+        get() = _activePresetId
+        set(value) {
+            _activePresetId = value
+            prefs?.edit()?.putString(KEY_ACTIVE_PRESET, value)?.apply()
+        }
+
+    val oledBlackEnabled: Boolean
+        get() = themeMode == ThemeMode.OLED
 
     private var _ambientArtworkEnabled by mutableStateOf(true)
     var ambientArtworkEnabled: Boolean
@@ -120,15 +224,7 @@ object AppPreferences {
             prefs?.edit()?.putBoolean(KEY_HAPTICS, value)?.apply()
         }
 
-    private var _spatialAudioMode by mutableStateOf(SpatialAudioMode.AUTOMATIC)
-    var spatialAudioMode: SpatialAudioMode
-        get() = _spatialAudioMode
-        set(value) {
-            _spatialAudioMode = value
-            prefs?.edit()?.putString(KEY_SPATIAL, value.name)?.apply()
-        }
-
-    private var _soundProfile by mutableStateOf(SoundProfileMode.CINEMA)
+    private var _soundProfile by mutableStateOf(SoundProfileMode.STANDARD)
     var soundProfile: SoundProfileMode
         get() = _soundProfile
         set(value) {
@@ -217,14 +313,24 @@ object AppPreferences {
 
         _accentPreset = parseEnum(sp.getString(KEY_ACCENT, null), AccentPreset.CRIMSON)
         _surfaceStyle = parseEnum(sp.getString(KEY_SURFACE, null), SurfaceStyle.ADAPTIVE)
-        _oledBlackEnabled = sp.getBoolean(KEY_OLED, false)
+        val savedThemeRaw = sp.getString(KEY_THEME_MODE, null)
+        _themeMode = if (savedThemeRaw != null) {
+            parseEnum(savedThemeRaw, ThemeMode.DARK)
+        } else if (sp.getBoolean(KEY_OLED, false)) {
+            ThemeMode.OLED
+        } else {
+            ThemeMode.DARK
+        }
+        _customAccentHex = sp.getLong(KEY_CUSTOM_ACCENT, _accentPreset.colorHex) or 0xFF000000L
+        _customBgHex = sp.getLong(KEY_CUSTOM_BG, 0xFF121214) or 0xFF000000L
+        _customSurfaceHex = sp.getLong(KEY_CUSTOM_SURFACE, 0xFF1C1C1E) or 0xFF000000L
+        _activePresetId = sp.getString(KEY_ACTIVE_PRESET, "apple-dark").orEmpty().ifBlank { "apple-dark" }
         _ambientArtworkEnabled = sp.getBoolean(KEY_AMBIENT, true)
         val cols = sp.getInt(KEY_GRID_COLS, 3)
         _gridColumnsPhone = if (cols == 2 || cols == 3) cols else 3
         _hapticsEnabled = sp.getBoolean(KEY_HAPTICS, true)
 
-        _spatialAudioMode = parseEnum(sp.getString(KEY_SPATIAL, null), SpatialAudioMode.AUTOMATIC)
-        _soundProfile = parseEnum(sp.getString(KEY_SOUND_PROFILE, null), SoundProfileMode.CINEMA)
+        _soundProfile = parseEnum(sp.getString(KEY_SOUND_PROFILE, null), SoundProfileMode.STANDARD)
         val gain = sp.getFloat(KEY_COMFORT_GAIN, 1.0f)
         _comfortGain = if (gain > 0.1f) gain.coerceIn(0.5f, 1.5f) else 1.0f
 
@@ -240,15 +346,42 @@ object AppPreferences {
         _externalPlayer = parseEnum(sp.getString(KEY_EXTERNAL_PLAYER, null), ExternalPlayerOption.INTERNAL)
     }
 
+    fun applyPreset(preset: ThemePresetItem) {
+        themeMode = preset.mode
+        customAccentHex = preset.accentHex
+        customBgHex = preset.bgHex
+        customSurfaceHex = preset.surfaceHex
+        activePresetId = preset.id
+        AccentPreset.entries.firstOrNull { it.colorHex == (preset.accentHex or 0xFF000000L) }?.let { match ->
+            _accentPreset = match
+            prefs?.edit()?.putString(KEY_ACCENT, match.name)?.apply()
+        }
+    }
+
+    fun formatColorHex(argb: Long): String {
+        val rgb = (argb and 0x00FFFFFFL).toInt()
+        return String.format("#%06X", rgb)
+    }
+
+    fun parseColorHex(hex: String?, fallback: Long): Long {
+        val cleaned = hex?.trim()?.removePrefix("#").orEmpty()
+        if (cleaned.length != 6) return fallback
+        val parsed = cleaned.toLongOrNull(16) ?: return fallback
+        return 0xFF000000L or parsed
+    }
+
     fun resetToDefaults() {
         accentPreset = AccentPreset.CRIMSON
         surfaceStyle = SurfaceStyle.ADAPTIVE
-        oledBlackEnabled = false
+        themeMode = ThemeMode.DARK
+        customAccentHex = 0xFFFA2D48
+        customBgHex = 0xFF121214
+        customSurfaceHex = 0xFF1C1C1E
+        activePresetId = "apple-dark"
         ambientArtworkEnabled = true
         gridColumnsPhone = 3
         hapticsEnabled = true
-        spatialAudioMode = SpatialAudioMode.AUTOMATIC
-        soundProfile = SoundProfileMode.CINEMA
+        soundProfile = SoundProfileMode.STANDARD
         comfortGain = 1f
         autoPiP = true
         autoRotateLandscape = false

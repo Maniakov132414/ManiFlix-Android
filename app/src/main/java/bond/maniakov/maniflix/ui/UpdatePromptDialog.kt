@@ -2,6 +2,7 @@ package bond.maniakov.maniflix.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -42,6 +44,10 @@ fun UpdatePromptDialog(
 ) {
     val context = LocalContext.current
     val accent = ManiFlixColors.accent()
+    val surface = ManiFlixColors.surface()
+    val textPrimary = ManiFlixColors.textPrimary()
+    val textSecondary = ManiFlixColors.textSecondary()
+    val borderColor = ManiFlixColors.cardBorder()
     val cfg = UpdateManager.config
 
     fun openExternalUrl(url: String?) {
@@ -68,9 +74,11 @@ fun UpdatePromptDialog(
     ) {
         Surface(
             shape = RoundedCornerShape(20.dp),
-            color = Color(0xFF1A1A1E),
+            color = surface,
             tonalElevation = 8.dp,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(0.7.dp, borderColor, RoundedCornerShape(20.dp))
         ) {
             Column(
                 modifier = Modifier
@@ -90,7 +98,7 @@ fun UpdatePromptDialog(
                             ?: "ManiFlix ${cfg?.latestVersion.orEmpty()}",
                         fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = textPrimary
                     )
                     Text(
                         text = if (isForced) {
@@ -99,7 +107,7 @@ fun UpdatePromptDialog(
                             "Phiên bản hiện tại: ${UpdateManager.displayVersion}"
                         },
                         fontSize = 12.sp,
-                        color = Color(0xFF98989F)
+                        color = textSecondary
                     )
                 }
 
@@ -109,7 +117,7 @@ fun UpdatePromptDialog(
                         text = notes,
                         fontSize = 13.5.sp,
                         lineHeight = 19.sp,
-                        color = Color(0xFFD2D2DA),
+                        color = textPrimary.copy(alpha = 0.88f),
                         modifier = Modifier
                             .fillMaxWidth()
                             .then(appleGlassSurfaceModifier(cornerRadius = 12.dp))
@@ -135,7 +143,8 @@ fun UpdatePromptDialog(
                     Text(
                         text = "Tải bản cập nhật (.apk)",
                         fontWeight = FontWeight.SemiBold,
-                        color = Color.White
+                        color = Color.White,
+                        maxLines = 1
                     )
                 }
 
@@ -146,7 +155,7 @@ fun UpdatePromptDialog(
                             text = "Các phiên bản APK",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
-                            color = Color(0xFF98989F)
+                            color = textSecondary
                         )
                         variants.forEach { variant ->
                             Row(
@@ -165,18 +174,22 @@ fun UpdatePromptDialog(
                                         text = variant.name,
                                         fontSize = 12.5.sp,
                                         fontWeight = FontWeight.Medium,
-                                        color = Color.White
+                                        color = textPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
                                         text = "${variant.arch} • Android minSdk ${variant.minSdk}",
                                         fontSize = 11.sp,
-                                        color = Color(0xFF98989F)
+                                        color = textSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                                 Icon(
                                     imageVector = Icons.Rounded.Download,
                                     contentDescription = "Tải xuống",
-                                    tint = Color(0xFFB4B4BC),
+                                    tint = textSecondary,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -194,7 +207,7 @@ fun UpdatePromptDialog(
                     ) {
                         Text(
                             text = "Nhắc lại sau 24 giờ",
-                            color = Color(0xFF98989F),
+                            color = textSecondary,
                             fontSize = 13.5.sp
                         )
                     }

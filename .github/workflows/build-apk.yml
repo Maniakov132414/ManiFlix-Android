@@ -101,7 +101,7 @@ jobs:
           sign_apk "app-arm64-v8a-release*.apk" "ManiFlix-arm64.apk"
           sign_apk "app-armeabi-v7a-release*.apk" "ManiFlix-armeabi-v7a.apk"
           sign_apk "app-universal-release*.apk" "ManiFlix-Universal.apk"
-          cp "dist/ManiFlix-arm64.apk" "dist/ManiFlix.apk"
+          cp "dist/ManiFlix-Universal.apk" "dist/ManiFlix.apk"
           ls -lh dist/
 
       - name: Verify APKs with apksigner and Python inspector
@@ -134,9 +134,13 @@ jobs:
                   assert dex_files, f"{apk.name}: missing classes.dex"
                   rsa_files = [n for n in names if n.startswith("META-INF/") and n.endswith((".RSA", ".DSA", ".EC"))]
                   assert rsa_files, f"{apk.name}: missing v1 signature certificate in META-INF"
+                  abis = sorted({n.split("/")[1] for n in names if n.startswith("lib/") and len(n.split("/")) >= 3})
+                  if apk.name in ("ManiFlix.apk", "ManiFlix-Universal.apk"):
+                      for expected_abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64"):
+                          assert expected_abi in abis, f"{apk.name}: missing ABI {expected_abi}, got {abis}"
                   print(
                       f"PASS {apk.name}: size={len(raw)/1024/1024:.2f}MB "
-                      f"dex={len(dex_files)} v1={rsa_files[0]} v2/v3=True"
+                      f"dex={len(dex_files)} v1={rsa_files[0]} v2/v3=True abis={abis}"
                   )
           PY
 
@@ -146,15 +150,18 @@ jobs:
           name: maniflix-apks
           path: dist/*.apk
 
-      - name: Publish GitHub Release v1.0.0
+      - name: Publish GitHub Release v1.0.1
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
-          name: ManiFlix Android v1.0.0
+          tag_name: v1.0.1
+          name: ManiFlix Android v1.0.1
           body: |
-            ManiFlix Native Android v1.0.0 (Jetpack Compose + Media3 HLS)
-            - `ManiFlix.apk` / `ManiFlix-arm64.apk`: 64-bit ARM (khuyên dùng cho hầu hết máy Android hiện đại)
-            - `ManiFlix-Universal.apk`: Hỗ trợ mọi kiến trúc CPU
+            ManiFlix Native Android v1.0.1 (Build 2 • Jetpack Compose + Media3 HLS)
+            - Hỗ trợ đầy đủ chế độ giao diện Sáng / Tối / Đen OLED / Tuỳ chỉnh màu và đồng bộ tài khoản
+            - Nâng cấp Trang chủ (Hero xem nhanh, chip thể loại, phân trang) & Chi tiết phim (diễn viên, đạo diễn, phim liên quan)
+            - Tối ưu vùng an toàn màn hình (safeDrawing insets) & layout cho mọi kích thước máy
+            - `ManiFlix.apk` / `ManiFlix-Universal.apk`: Gói đa kiến trúc (arm64-v8a, armeabi-v7a, x86, x86_64) chạy trên mọi điện thoại Android, TV và giả lập
+            - `ManiFlix-arm64.apk`: Tối ưu 64-bit ARM
             - `ManiFlix-armeabi-v7a.apk`: 32-bit ARM cho máy Android đời cũ
           files: dist/*.apk
           make_latest: true

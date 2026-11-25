@@ -14,6 +14,7 @@ import bond.maniakov.maniflix.model.MovieDetailResult
 import bond.maniakov.maniflix.model.MovieItem
 import bond.maniakov.maniflix.model.MovieTag
 import bond.maniakov.maniflix.model.UserInfo
+import bond.maniakov.maniflix.model.UserThemeConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -44,9 +45,36 @@ object ManiFlixApi {
         return parseMovieList(obj.optJSONArray("items"))
     }
 
+    private val LIST_CATEGORY_SLUGS = setOf(
+        "phim-bo",
+        "phim-le",
+        "hoat-hinh",
+        "tv-shows",
+        "phim-chieu-rap",
+        "phim-sap-chieu",
+        "phim-thuyet-minh",
+        "phim-long-tieng",
+        "phim-vietsub",
+        "phim-bo-dang-chieu",
+        "phim-bo-hoan-thanh"
+    )
+
     suspend fun fetchCategory(type: String, page: Int = 1): List<MovieItem> {
-        val encodedType = encodeQuery(type)
-        val obj = requestJsonObject("/api/category?type=$encodedType&page=$page")
+        val normalized = type.trim().lowercase()
+        val encoded = encodeQuery(normalized)
+        val path = when {
+            normalized.startsWith("genre:") ->
+                "/api/category?genre=${encodeQuery(normalized.removePrefix("genre:"))}&page=$page"
+            normalized.startsWith("country:") ->
+                "/api/category?country=${encodeQuery(normalized.removePrefix("country:"))}&page=$page"
+            normalized.startsWith("year:") ->
+                "/api/category?year=${encodeQuery(normalized.removePrefix("year:"))}&page=$page"
+            normalized in LIST_CATEGORY_SLUGS ->
+                "/api/category?type=$encoded&page=$page"
+            else ->
+                "/api/category?genre=$encoded&page=$page"
+        }
+        val obj = requestJsonObject(path)
         return parseMovieList(obj.optJSONArray("items"))
     }
 
@@ -217,6 +245,27 @@ object ManiFlixApi {
         val obj = requestJsonObject("/api/user/favorites/toggle", method = "POST", body = body, token = token)
         val arr = obj.optJSONArray("favorites") ?: return null
         return parseFavoriteList(arr)
+    }
+
+    suspend fun saveUserTheme(
+        token: String,
+        presetId: String,
+        accentHex: String,
+        bgHex: String,
+        surfaceHex: String
+    ): UserThemeConfig? {
+        val themeObj = JSONObject().apply {
+            put("presetId", presetId)
+            put("accent", accentHex)
+            put("accent2", accentHex)
+            put("bg", bgHex)
+            put("surface", surfaceHex)
+        }
+        val body = JSONObject().apply {
+            put("themeConfig", themeObj)
+        }
+        val obj = requestJsonObject("/api/user/theme", method = "POST", body = body, token = token)
+        return obj.optJSONObject("themeConfig")?.let { parseThemeConfig(it) }
     }
 
     suspend fun fetchAndroidVersion(): AndroidVersionConfig {
@@ -433,7 +482,18 @@ object ManiFlixApi {
             username = u.optString("username", ""),
             displayName = u.optString("displayName", ""),
             favoritesCount = parseFlexInt(u.opt("favoritesCount")),
-            historyCount = parseFlexInt(u.opt("historyCount"))
+            historyCount = parseFlexInt(u.opt("historyCount")),
+            themeConfig = u.optJSONObject("themeConfig")?.let { parseThemeConfig(it) }
+        )
+    }
+
+    private fun parseThemeConfig(t: JSONObject): UserThemeConfig {
+        return UserThemeConfig(
+            presetId = t.optString("presetId", ""),
+            accent = t.optString("accent", ""),
+            accent2 = t.optString("accent2", ""),
+            bg = t.optString("bg", ""),
+            surface = t.optString("surface", "")
         )
     }
 

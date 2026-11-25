@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -74,8 +73,11 @@ fun LibraryScreen(
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
-    val oled = AppPreferences.oledBlackEnabled
     val accent = ManiFlixColors.accent()
+    val bgColor = ManiFlixColors.background()
+    val textPrimary = ManiFlixColors.textPrimary()
+    val textSecondary = ManiFlixColors.textSecondary()
+    val borderColor = ManiFlixColors.cardBorder()
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var isRefreshing by remember { mutableStateOf(false) }
@@ -89,14 +91,14 @@ fun LibraryScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(ManiFlixColors.background(oled))
+            .background(bgColor)
             .statusBarsPadding()
     ) {
         Text(
             text = "Tủ phim",
             fontSize = 30.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White,
+            color = textPrimary,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 10.dp)
         )
 
@@ -106,7 +108,8 @@ fun LibraryScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 6.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color.White.copy(alpha = 0.08f))
+                .background(ManiFlixColors.surfaceElevated())
+                .border(0.6.dp, borderColor, RoundedCornerShape(12.dp))
                 .padding(3.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -128,7 +131,7 @@ fun LibraryScreen(
                         text = title,
                         fontSize = 12.5.sp,
                         fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-                        color = if (active) Color.White else Color(0xFFB4B4BC),
+                        color = if (active) Color.White else textSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -161,7 +164,11 @@ fun LibraryScreen(
                     ) {
                         if (!AppState.isLoggedIn) {
                             item(key = "sync_banner") {
-                                SyncAccountBanner(accent = accent)
+                                SyncAccountBanner(
+                                    accent = accent,
+                                    textPrimary = textPrimary,
+                                    textSecondary = textSecondary
+                                )
                             }
                         }
 
@@ -169,7 +176,8 @@ fun LibraryScreen(
                             item(key = "empty_history") {
                                 LibraryEmptyState(
                                     icon = Icons.Rounded.History,
-                                    message = "Chưa có phim đang xem."
+                                    message = "Chưa có phim đang xem.",
+                                    textSecondary = textSecondary
                                 )
                             }
                         } else {
@@ -193,12 +201,8 @@ fun LibraryScreen(
                                         modifier = Modifier
                                             .size(width = 96.dp, height = 58.dp)
                                             .clip(RoundedCornerShape(8.dp))
-                                            .background(Color.White.copy(alpha = 0.06f))
-                                            .border(
-                                                0.5.dp,
-                                                Color.White.copy(alpha = 0.08f),
-                                                RoundedCornerShape(8.dp)
-                                            )
+                                            .background(ManiFlixColors.surfaceElevated())
+                                            .border(0.5.dp, borderColor, RoundedCornerShape(8.dp))
                                     )
 
                                     Column(
@@ -209,20 +213,21 @@ fun LibraryScreen(
                                             text = entry.name.ifBlank { entry.slug },
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Medium,
-                                            color = Color.White,
+                                            color = textPrimary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
                                             text = "${entry.episodeName.ifBlank { "Tập 1" }} • ${PlayerEngine.formatTime(entry.currentTime)}",
                                             fontSize = 11.5.sp,
-                                            color = Color(0xFF98989F),
-                                            maxLines = 1
+                                            color = textSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                         LinearProgressIndicator(
                                             progress = { entry.progressRatio.coerceIn(0f, 1f) },
                                             color = accent,
-                                            trackColor = Color.White.copy(alpha = 0.16f),
+                                            trackColor = borderColor,
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .height(3.dp)
@@ -239,7 +244,7 @@ fun LibraryScreen(
                                         Icon(
                                             imageVector = Icons.Rounded.DeleteOutline,
                                             contentDescription = "Xoá khỏi lịch sử",
-                                            tint = Color(0xFFA0A0A8)
+                                            tint = textSecondary
                                         )
                                     }
                                 }
@@ -260,7 +265,7 @@ fun LibraryScreen(
                             Icon(
                                 imageVector = Icons.Rounded.AccountCircle,
                                 contentDescription = null,
-                                tint = Color(0xFF8E8E93),
+                                tint = textSecondary,
                                 modifier = Modifier.size(48.dp)
                             )
                             Spacer(modifier = Modifier.height(12.dp))
@@ -268,14 +273,14 @@ fun LibraryScreen(
                                 text = "Đồng bộ danh sách đã lưu",
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color.White,
+                                color = textPrimary,
                                 textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = "Đăng nhập để lưu và đồng bộ các phim bạn yêu thích trên mọi thiết bị.",
                                 fontSize = 12.5.sp,
-                                color = Color(0xFF8E8E93),
+                                color = textSecondary,
                                 textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(16.dp))
@@ -299,7 +304,8 @@ fun LibraryScreen(
                         ) {
                             LibraryEmptyState(
                                 icon = Icons.Rounded.BookmarkBorder,
-                                message = "Chưa có phim đã lưu."
+                                message = "Chưa có phim đã lưu.",
+                                textSecondary = textSecondary
                             )
                         }
                     } else {
@@ -352,7 +358,8 @@ fun LibraryScreen(
                         ) {
                             LibraryEmptyState(
                                 icon = Icons.Rounded.VisibilityOff,
-                                message = "Chưa có phim nào bị ẩn."
+                                message = "Chưa có phim nào bị ẩn.",
+                                textSecondary = textSecondary
                             )
                         }
                     } else {
@@ -386,12 +393,8 @@ fun LibraryScreen(
                                         modifier = Modifier
                                             .size(width = 52.dp, height = 74.dp)
                                             .clip(RoundedCornerShape(8.dp))
-                                            .background(Color.White.copy(alpha = 0.06f))
-                                            .border(
-                                                0.5.dp,
-                                                Color.White.copy(alpha = 0.08f),
-                                                RoundedCornerShape(8.dp)
-                                            )
+                                            .background(ManiFlixColors.surfaceElevated())
+                                            .border(0.5.dp, borderColor, RoundedCornerShape(8.dp))
                                     )
 
                                     Column(
@@ -402,14 +405,14 @@ fun LibraryScreen(
                                             text = item.name,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Medium,
-                                            color = Color.White,
+                                            color = textPrimary,
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
                                             text = "Đang ẩn khỏi trang chủ & tìm kiếm",
                                             fontSize = 11.5.sp,
-                                            color = Color(0xFF98989F),
+                                            color = textSecondary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -429,7 +432,8 @@ fun LibraryScreen(
                                             text = "Hiện lại",
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = Color.White
+                                            color = Color.White,
+                                            maxLines = 1
                                         )
                                     }
                                 }
@@ -443,7 +447,11 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun SyncAccountBanner(accent: Color) {
+private fun SyncAccountBanner(
+    accent: Color,
+    textPrimary: Color,
+    textSecondary: Color
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -460,12 +468,14 @@ private fun SyncAccountBanner(accent: Color) {
                 text = "Chưa đăng nhập",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White
+                color = textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = "Đăng nhập để đồng bộ lịch sử xem trên nhiều thiết bị.",
                 fontSize = 11.5.sp,
-                color = Color(0xFF98989F)
+                color = textSecondary
             )
         }
 
@@ -480,7 +490,8 @@ private fun SyncAccountBanner(accent: Color) {
                 text = "Đăng nhập",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White
+                color = Color.White,
+                maxLines = 1
             )
         }
     }
@@ -489,7 +500,8 @@ private fun SyncAccountBanner(accent: Color) {
 @Composable
 private fun LibraryEmptyState(
     icon: ImageVector,
-    message: String
+    message: String,
+    textSecondary: Color
 ) {
     Column(
         modifier = Modifier
@@ -501,13 +513,13 @@ private fun LibraryEmptyState(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = Color(0xFF727278),
+            tint = textSecondary,
             modifier = Modifier.size(34.dp)
         )
         Text(
             text = message,
             fontSize = 14.sp,
-            color = Color(0xFF8E8E93),
+            color = textSecondary,
             textAlign = TextAlign.Center
         )
     }

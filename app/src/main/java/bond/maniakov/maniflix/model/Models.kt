@@ -224,11 +224,20 @@ data class BlockedMovieRecord(
         get() = ImageUrlResolver.resolve(poster)
 }
 
+data class UserThemeConfig(
+    val presetId: String = "",
+    val accent: String = "",
+    val accent2: String = "",
+    val bg: String = "",
+    val surface: String = ""
+)
+
 data class UserInfo(
     val username: String = "",
     val displayName: String = "",
     val favoritesCount: Int = 0,
-    val historyCount: Int = 0
+    val historyCount: Int = 0,
+    val themeConfig: UserThemeConfig? = null
 )
 
 data class AuthResult(

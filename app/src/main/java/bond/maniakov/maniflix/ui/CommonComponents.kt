@@ -6,7 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -80,20 +79,27 @@ fun appleGlassSurfaceModifier(
     highlighted: Boolean = false
 ): Modifier {
     val style = AppPreferences.surfaceStyle
-    val oled = AppPreferences.oledBlackEnabled
+    val isLight = ManiFlixColors.isLight()
     val accent = ManiFlixColors.accent()
+    val surface = ManiFlixColors.surface()
     val shape = RoundedCornerShape(cornerRadius)
+
     val fillColor = when {
-        highlighted -> accent.copy(alpha = 0.24f)
-        style == SurfaceStyle.TRANSLUCENT -> Color.White.copy(alpha = if (oled) 0.08f else 0.11f)
-        style == SurfaceStyle.MINIMAL -> ManiFlixColors.surface(oled)
-        else -> Color(0xFF1F1F23).copy(alpha = if (oled) 0.85f else 0.92f)
+        highlighted -> accent.copy(alpha = if (isLight) 0.16f else 0.24f)
+        style == SurfaceStyle.TRANSLUCENT -> if (isLight) {
+            surface.copy(alpha = 0.84f)
+        } else {
+            Color.White.copy(alpha = if (AppPreferences.oledBlackEnabled) 0.08f else 0.11f)
+        }
+        style == SurfaceStyle.MINIMAL -> surface
+        else -> surface.copy(alpha = if (isLight) 0.96f else 0.92f)
     }
+
     val borderColor = when {
-        highlighted -> accent.copy(alpha = 0.85f)
-        style == SurfaceStyle.TRANSLUCENT -> Color.White.copy(alpha = 0.18f)
-        else -> Color.White.copy(alpha = 0.10f)
+        highlighted -> accent.copy(alpha = 0.90f)
+        else -> ManiFlixColors.cardBorder()
     }
+
     return Modifier
         .clip(shape)
         .background(fillColor)
@@ -103,10 +109,12 @@ fun appleGlassSurfaceModifier(
 @Composable
 fun AmbientArtworkBackground(
     imageUrl: String?,
-    oled: Boolean,
+    oled: Boolean = AppPreferences.oledBlackEnabled,
     height: Dp = 360.dp
 ) {
-    val bgColor = ManiFlixColors.background(oled)
+    val bgColor = ManiFlixColors.background()
+    val isLight = ManiFlixColors.isLight()
+
     if (!AppPreferences.ambientArtworkEnabled || imageUrl.isNullOrBlank()) {
         Box(
             modifier = Modifier
@@ -115,7 +123,7 @@ fun AmbientArtworkBackground(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            ManiFlixColors.accent().copy(alpha = if (oled) 0.08f else 0.12f),
+                            ManiFlixColors.accent().copy(alpha = if (isLight) 0.09f else if (oled) 0.08f else 0.13f),
                             bgColor
                         )
                     )
@@ -127,6 +135,8 @@ fun AmbientArtworkBackground(
     val context = LocalContext.current
     val supportsNativeBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val artworkAlpha = when {
+        isLight && !supportsNativeBlur -> 0.14f
+        isLight -> 0.24f
         !supportsNativeBlur -> if (oled) 0.16f else 0.22f
         oled -> 0.34f
         else -> 0.46f
@@ -155,8 +165,8 @@ fun AmbientArtworkBackground(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0.0f to Color.Black.copy(alpha = 0.20f),
-                        0.45f to bgColor.copy(alpha = if (supportsNativeBlur) 0.56f else 0.72f),
+                        0.0f to if (isLight) bgColor.copy(alpha = 0.28f) else Color.Black.copy(alpha = 0.20f),
+                        0.48f to bgColor.copy(alpha = if (supportsNativeBlur) 0.62f else 0.76f),
                         1.0f to bgColor
                     )
                 )
@@ -178,6 +188,9 @@ fun MoviePosterCard(
     val cardShape = RoundedCornerShape(10.dp)
     val badgeText = movie.quality.takeIf { it.isNotBlank() }
         ?: movie.episodeCurrent.takeIf { it.isNotBlank() }
+    val primaryText = ManiFlixColors.textPrimary()
+    val secondaryText = ManiFlixColors.textSecondary()
+    val borderColor = ManiFlixColors.cardBorder()
 
     Column(
         modifier = modifier
@@ -198,8 +211,8 @@ fun MoviePosterCard(
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
                 .clip(cardShape)
-                .background(Color.White.copy(alpha = 0.06f))
-                .border(0.6.dp, Color.White.copy(alpha = 0.10f), cardShape)
+                .background(ManiFlixColors.surfaceElevated())
+                .border(0.6.dp, borderColor, cardShape)
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(context)
@@ -239,7 +252,7 @@ fun MoviePosterCard(
                 text = movie.name,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color.White,
+                color = primaryText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
@@ -261,7 +274,7 @@ fun MoviePosterCard(
                     Icon(
                         imageVector = Icons.Rounded.MoreHoriz,
                         contentDescription = "Tuỳ chọn phim",
-                        tint = Color(0xFFA6A6AC),
+                        tint = secondaryText,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -283,7 +296,7 @@ fun MoviePosterCard(
             Text(
                 text = metaLine,
                 fontSize = 11.sp,
-                color = Color(0xFF8E8E93),
+                color = secondaryText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -302,16 +315,19 @@ fun MovieContextDropdownMenu(
     val isFavorite = AppState.isFavorite(movie.slug)
     val isBlocked = AppState.isBlocked(movie.slug)
     val hasHistory = AppState.hasHistory(movie.slug)
+    val textPrimary = ManiFlixColors.textPrimary()
+    val dividerColor = ManiFlixColors.cardBorder()
+    val dangerColor = Color(0xFFFF453A)
 
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF222226)
+        containerColor = ManiFlixColors.surfaceElevated()
     ) {
         DropdownMenuItem(
-            text = { Text("Xem ngay", color = Color.White) },
+            text = { Text("Xem ngay", color = textPrimary) },
             leadingIcon = {
-                Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = Color.White)
+                Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = textPrimary)
             },
             onClick = {
                 onDismiss()
@@ -323,14 +339,14 @@ fun MovieContextDropdownMenu(
             text = {
                 Text(
                     if (isFavorite) "Xoá khỏi Tủ phim" else "Thêm vào Tủ phim",
-                    color = Color.White
+                    color = textPrimary
                 )
             },
             leadingIcon = {
                 Icon(
                     if (isFavorite) Icons.Rounded.BookmarkRemove else Icons.Rounded.BookmarkAdd,
                     contentDescription = null,
-                    tint = if (isFavorite) ManiFlixColors.accent() else Color.White
+                    tint = if (isFavorite) ManiFlixColors.accent() else textPrimary
                 )
             },
             onClick = {
@@ -339,12 +355,12 @@ fun MovieContextDropdownMenu(
             }
         )
 
-        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+        HorizontalDivider(color = dividerColor)
 
         DropdownMenuItem(
-            text = { Text("Thích", color = Color.White) },
+            text = { Text("Thích", color = textPrimary) },
             leadingIcon = {
-                Icon(Icons.Rounded.ThumbUp, contentDescription = null, tint = Color.White)
+                Icon(Icons.Rounded.ThumbUp, contentDescription = null, tint = textPrimary)
             },
             onClick = {
                 onDismiss()
@@ -353,9 +369,9 @@ fun MovieContextDropdownMenu(
         )
 
         DropdownMenuItem(
-            text = { Text("Đề xuất ít lại", color = Color.White) },
+            text = { Text("Đề xuất ít lại", color = textPrimary) },
             leadingIcon = {
-                Icon(Icons.Rounded.ThumbDown, contentDescription = null, tint = Color.White)
+                Icon(Icons.Rounded.ThumbDown, contentDescription = null, tint = textPrimary)
             },
             onClick = {
                 onDismiss()
@@ -367,14 +383,14 @@ fun MovieContextDropdownMenu(
             text = {
                 Text(
                     if (isBlocked) "Hiện lại phim" else "Ẩn phim",
-                    color = if (isBlocked) Color.White else Color(0xFFFF453A)
+                    color = if (isBlocked) textPrimary else dangerColor
                 )
             },
             leadingIcon = {
                 Icon(
                     if (isBlocked) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
                     contentDescription = null,
-                    tint = if (isBlocked) Color.White else Color(0xFFFF453A)
+                    tint = if (isBlocked) textPrimary else dangerColor
                 )
             },
             onClick = {
@@ -388,11 +404,11 @@ fun MovieContextDropdownMenu(
         )
 
         if (hasHistory) {
-            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+            HorizontalDivider(color = dividerColor)
             DropdownMenuItem(
-                text = { Text("Xoá khỏi lịch sử", color = Color(0xFFFF453A)) },
+                text = { Text("Xoá khỏi lịch sử", color = dangerColor) },
                 leadingIcon = {
-                    Icon(Icons.Rounded.DeleteOutline, contentDescription = null, tint = Color(0xFFFF453A))
+                    Icon(Icons.Rounded.DeleteOutline, contentDescription = null, tint = dangerColor)
                 },
                 onClick = {
                     onDismiss()
@@ -401,12 +417,12 @@ fun MovieContextDropdownMenu(
             )
         }
 
-        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+        HorizontalDivider(color = dividerColor)
 
         DropdownMenuItem(
-            text = { Text("Chia sẻ liên kết", color = Color.White) },
+            text = { Text("Chia sẻ liên kết", color = textPrimary) },
             leadingIcon = {
-                Icon(Icons.Rounded.Share, contentDescription = null, tint = Color.White)
+                Icon(Icons.Rounded.Share, contentDescription = null, tint = textPrimary)
             },
             onClick = {
                 onDismiss()

@@ -28,16 +28,18 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -56,7 +58,6 @@ import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.Forward10
 import androidx.compose.material.icons.rounded.GridView
-import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Pause
@@ -131,7 +132,6 @@ import androidx.media3.ui.PlayerView
 import bond.maniakov.maniflix.data.AppPreferences
 import bond.maniakov.maniflix.data.ExternalPlayerOption
 import bond.maniakov.maniflix.data.SoundProfileMode
-import bond.maniakov.maniflix.data.SpatialAudioMode
 import bond.maniakov.maniflix.ui.theme.ManiFlixColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -470,7 +470,7 @@ fun ManiFlixPlayerScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .statusBarsPadding()
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
                         .padding(top = 16.dp),
                     contentAlignment = Alignment.TopCenter
                 ) {
@@ -505,7 +505,7 @@ fun ManiFlixPlayerScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .statusBarsPadding()
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
                         .padding(top = 16.dp),
                     contentAlignment = Alignment.TopCenter
                 ) {
@@ -521,7 +521,8 @@ fun ManiFlixPlayerScreen(
                             text = speedText,
                             color = Color.White,
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            softWrap = false
                         )
                     }
                 }
@@ -532,7 +533,7 @@ fun ManiFlixPlayerScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .statusBarsPadding()
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
                         .padding(top = 56.dp),
                     contentAlignment = Alignment.TopCenter
                 ) {
@@ -541,7 +542,10 @@ fun ManiFlixPlayerScreen(
                             text = toast,
                             color = Color.White,
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -562,7 +566,7 @@ fun ManiFlixPlayerScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .navigationBarsPadding()
+                            .windowInsetsPadding(WindowInsets.safeDrawing)
                             .padding(end = 20.dp, bottom = bottomPadding),
                         contentAlignment = Alignment.BottomEnd
                     ) {
@@ -571,7 +575,8 @@ fun ManiFlixPlayerScreen(
                                 text = label,
                                 color = Color.White,
                                 fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                softWrap = false
                             )
                             Spacer(Modifier.width(10.dp))
                             Icon(
@@ -588,7 +593,7 @@ fun ManiFlixPlayerScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .navigationBarsPadding()
+                            .windowInsetsPadding(WindowInsets.safeDrawing)
                             .padding(end = 20.dp, bottom = bottomPadding),
                         contentAlignment = Alignment.BottomEnd
                     ) {
@@ -597,7 +602,8 @@ fun ManiFlixPlayerScreen(
                                 text = if (engine.hasNextEpisode) "Tập tiếp theo" else "Bỏ qua kết thúc",
                                 color = Color.White,
                                 fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                softWrap = false
                             )
                             Spacer(Modifier.width(10.dp))
                             Icon(
@@ -617,7 +623,7 @@ fun ManiFlixPlayerScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .navigationBarsPadding()
+                            .windowInsetsPadding(WindowInsets.safeDrawing)
                             .padding(start = 20.dp, bottom = bottomPadding),
                         contentAlignment = Alignment.BottomStart
                     ) {
@@ -633,7 +639,8 @@ fun ManiFlixPlayerScreen(
                                 text = "Hoàn tác",
                                 color = Color.White,
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                softWrap = false
                             )
                         }
                     }
@@ -650,7 +657,7 @@ fun ManiFlixPlayerScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .statusBarsPadding()
+                            .windowInsetsPadding(WindowInsets.safeDrawing)
                             .padding(top = 12.dp, end = 16.dp),
                         contentAlignment = Alignment.TopEnd
                     ) {
@@ -676,21 +683,20 @@ fun ManiFlixPlayerScreen(
                                     1.0f to Color.Black.copy(alpha = 0.78f)
                                 )
                             )
-                            .statusBarsPadding()
-                            .navigationBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                            .windowInsetsPadding(WindowInsets.safeDrawing)
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.SpaceBetween
                     ) {
                         // Top Bar
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             GlassCircleButton(
                                 icon = Icons.Rounded.Close,
                                 contentDescription = "Đóng trình phát",
-                                size = 40.dp,
+                                size = 38.dp,
                                 onClick = { handleClose() }
                             )
 
@@ -704,6 +710,7 @@ fun ManiFlixPlayerScreen(
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
+                                    softWrap = false,
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
@@ -711,13 +718,11 @@ fun ManiFlixPlayerScreen(
                                     color = Color.White.copy(alpha = 0.72f),
                                     fontSize = 12.sp,
                                     maxLines = 1,
+                                    softWrap = false,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
 
-                            val isHeadphone = remember(showControls) {
-                                SpatialAudioController.isHeadphoneOutput(context)
-                            }
                             val rateLabel = if (engine.playbackRate % 1f == 0f) {
                                 "${engine.playbackRate.toInt()}x"
                             } else {
@@ -725,23 +730,27 @@ fun ManiFlixPlayerScreen(
                             }
                             GlassPill(
                                 clickable = true,
+                                horizontalPadding = 10.dp,
                                 onClick = {
                                     bumpAutoHide()
                                     showAudioDrawer = true
                                 }
                             ) {
                                 Icon(
-                                    imageVector = if (isHeadphone) Icons.Rounded.Headphones else Icons.Rounded.Tune,
-                                    contentDescription = "Âm thanh & tốc độ",
+                                    imageVector = Icons.Rounded.Tune,
+                                    contentDescription = "Âm & Tốc độ",
                                     tint = Color.White,
-                                    modifier = Modifier.size(15.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                                 Spacer(Modifier.width(5.dp))
                                 Text(
-                                    text = if (isHeadphone) "Spatial" else rateLabel,
+                                    text = "Âm & Tốc độ ($rateLabel)",
                                     color = Color.White,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
 
@@ -891,13 +900,13 @@ fun ManiFlixPlayerScreen(
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 if (engine.hasPreviousEpisode) {
                                     GlassCircleButton(
                                         icon = Icons.Rounded.SkipPrevious,
                                         contentDescription = "Tập trước",
-                                        size = 34.dp
+                                        size = 32.dp
                                     ) {
                                         engine.previousEpisode()
                                         bumpAutoHide()
@@ -906,6 +915,8 @@ fun ManiFlixPlayerScreen(
 
                                 GlassPill(
                                     clickable = true,
+                                    horizontalPadding = 10.dp,
+                                    modifier = Modifier.weight(1f, fill = false),
                                     onClick = {
                                         bumpAutoHide()
                                         showEpisodeDrawer = true
@@ -915,14 +926,17 @@ fun ManiFlixPlayerScreen(
                                         imageVector = Icons.Rounded.GridView,
                                         contentDescription = null,
                                         tint = Color.White,
-                                        modifier = Modifier.size(14.dp)
+                                        modifier = Modifier.size(13.dp)
                                     )
                                     Spacer(Modifier.width(5.dp))
                                     Text(
                                         text = "Tập & nguồn",
                                         color = Color.White,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
 
@@ -930,7 +944,7 @@ fun ManiFlixPlayerScreen(
                                     GlassCircleButton(
                                         icon = Icons.Rounded.SkipNext,
                                         contentDescription = "Tập tiếp theo",
-                                        size = 34.dp
+                                        size = 32.dp
                                     ) {
                                         engine.nextEpisode()
                                         bumpAutoHide()
@@ -941,6 +955,7 @@ fun ManiFlixPlayerScreen(
 
                                 GlassPill(
                                     clickable = true,
+                                    horizontalPadding = 9.dp,
                                     onClick = {
                                         engine.cycleAspectMode()
                                         bumpAutoHide()
@@ -951,19 +966,23 @@ fun ManiFlixPlayerScreen(
                                         imageVector = Icons.Rounded.AspectRatio,
                                         contentDescription = null,
                                         tint = Color.White,
-                                        modifier = Modifier.size(14.dp)
+                                        modifier = Modifier.size(13.dp)
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
                                         text = engine.aspectMode.title,
                                         color = Color.White,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
 
                                 GlassPill(
                                     clickable = true,
+                                    horizontalPadding = 9.dp,
                                     onClick = {
                                         OrientationHelper.setPlayerLandscape(activity, !isLandscape)
                                         bumpAutoHide()
@@ -974,14 +993,16 @@ fun ManiFlixPlayerScreen(
                                         imageVector = Icons.Rounded.ScreenRotation,
                                         contentDescription = null,
                                         tint = Color.White,
-                                        modifier = Modifier.size(14.dp)
+                                        modifier = Modifier.size(13.dp)
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
                                         text = if (isLandscape) "Dọc" else "Ngang",
                                         color = Color.White,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        softWrap = false
                                     )
                                 }
                             }
@@ -1099,12 +1120,10 @@ fun ManiFlixPlayerScreen(
         }
     }
 
-    // Audio / Spatial / Aspect / Speed / External Player Modal Sheet
+    // Audio / Aspect / Speed / External Player Modal Sheet
     if (showAudioDrawer) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val outputLabel = remember(showAudioDrawer) { SpatialAudioController.currentAudioOutputLabel(context) }
-        val hwSpatial = remember(showAudioDrawer) { SpatialAudioController.isHardwareSpatializerAvailable(context) }
-        val headTrack = remember(showAudioDrawer) { SpatialAudioController.isHeadTrackingSupported(context) }
 
         ModalBottomSheet(
             onDismissRequest = { showAudioDrawer = false },
@@ -1135,7 +1154,7 @@ fun ManiFlixPlayerScreen(
                     }
                 }
 
-                // Spatial Diagnostics
+                // Audio Output Info
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = Color.White.copy(alpha = 0.06f)
@@ -1146,33 +1165,11 @@ fun ManiFlixPlayerScreen(
                             .padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        DiagnosticRow("Thiết bị đầu ra", outputLabel)
-                        DiagnosticRow("Hardware Spatializer", if (hwSpatial) "Hỗ trợ" else "Hiệu ứng phần mềm")
-                        DiagnosticRow("Theo dõi chuyển động đầu", if (headTrack) "Sẵn sàng" else "Không hỗ trợ")
+                        DiagnosticRow("Đầu ra âm thanh", outputLabel)
                     }
                 }
 
-                Text("Chế độ âm thanh không gian", fontSize = 13.sp, color = Color.White.copy(alpha = 0.7f))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SpatialAudioMode.entries.forEach { mode ->
-                        FilterChip(
-                            selected = AppPreferences.spatialAudioMode == mode,
-                            onClick = {
-                                AppPreferences.spatialAudioMode = mode
-                                engine.refreshAudioEffects()
-                            },
-                            label = { Text(mode.title, fontSize = 12.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = accentColor,
-                                selectedLabelColor = Color.White,
-                                containerColor = Color.White.copy(alpha = 0.08f),
-                                labelColor = Color.White
-                            )
-                        )
-                    }
-                }
-
-                Text("Cấu hình âm", fontSize = 13.sp, color = Color.White.copy(alpha = 0.7f))
+                Text("Cấu hình âm thanh", fontSize = 13.sp, color = Color.White.copy(alpha = 0.7f))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SoundProfileMode.entries.forEach { profile ->
                         FilterChip(
@@ -1197,7 +1194,7 @@ fun ManiFlixPlayerScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Mức âm lượng nội bộ", fontSize = 13.sp, color = Color.White.copy(alpha = 0.85f))
+                        Text("Tăng cường âm lượng", fontSize = 13.sp, color = Color.White.copy(alpha = 0.85f))
                         Text("${(AppPreferences.comfortGain * 100).toInt()}%", fontSize = 13.sp, color = Color.White.copy(alpha = 0.65f))
                     }
                     Slider(
@@ -1354,21 +1351,23 @@ private fun DiagnosticRow(label: String, value: String) {
 
 @Composable
 private fun GlassPill(
+    modifier: Modifier = Modifier,
     clickable: Boolean = false,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 12.dp,
     onClick: (() -> Unit)? = null,
     content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
 ) {
-    val modifier = Modifier
+    val pillModifier = modifier
         .clip(CircleShape)
         .background(Color(0xA6141418))
         .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
         .let { base ->
             if (clickable && onClick != null) base.clickable(onClick = onClick) else base
         }
-        .padding(horizontal = 12.dp, vertical = 7.dp)
+        .padding(horizontal = horizontalPadding, vertical = 7.dp)
 
     Row(
-        modifier = modifier,
+        modifier = pillModifier,
         verticalAlignment = Alignment.CenterVertically,
         content = content
     )

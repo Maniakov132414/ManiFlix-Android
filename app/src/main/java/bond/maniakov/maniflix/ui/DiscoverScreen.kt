@@ -27,19 +27,25 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.BookmarkAdd
 import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -55,6 +61,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import bond.maniakov.maniflix.data.AppPreferences
@@ -69,27 +76,50 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
+private data class DiscoverCategoryOption(
+    val label: String,
+    val apiSlug: String?
+)
+
+private val DISCOVER_CATEGORIES = listOf(
+    DiscoverCategoryOption("Tất cả", null),
+    DiscoverCategoryOption("Phim bộ", "phim-bo"),
+    DiscoverCategoryOption("Phim lẻ", "phim-le"),
+    DiscoverCategoryOption("Hoạt hình", "hoat-hinh"),
+    DiscoverCategoryOption("Hành động", "hanh-dong"),
+    DiscoverCategoryOption("Cổ trang", "co-trang"),
+    DiscoverCategoryOption("Tình cảm", "tinh-cam"),
+    DiscoverCategoryOption("Kinh dị", "kinh-di"),
+    DiscoverCategoryOption("Viễn tưởng", "vien-tuong")
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun DiscoverScreen(
-    bottomContentPadding: androidx.compose.ui.unit.Dp = 16.dp,
+    bottomContentPadding: Dp = 16.dp,
     onMovieClick: (slug: String, seedMovie: MovieItem?) -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
-    val oled = AppPreferences.oledBlackEnabled
     val accent = ManiFlixColors.accent()
+    val bgColor = ManiFlixColors.background()
+    val textPrimary = ManiFlixColors.textPrimary()
+    val textSecondary = ManiFlixColors.textSecondary()
 
     var heroMovies by remember { mutableStateOf<List<MovieItem>>(emptyList()) }
     var seriesMovies by remember { mutableStateOf<List<MovieItem>>(emptyList()) }
     var singleMovies by remember { mutableStateOf<List<MovieItem>>(emptyList()) }
     var animeMovies by remember { mutableStateOf<List<MovieItem>>(emptyList()) }
-    var selectedCategory by remember { mutableStateOf("Tất cả") }
+    var filteredMovies by remember { mutableStateOf<List<MovieItem>>(emptyList()) }
+
+    var selectedCategory by remember { mutableStateOf(DISCOVER_CATEGORIES.first()) }
+    var currentPage by remember { mutableIntStateOf(1) }
+    var hasMorePages by remember { mutableStateOf(true) }
     var isLoading by remember { mutableStateOf(true) }
+    var isCategoryLoading by remember { mutableStateOf(false) }
+    var isLoadingMore by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    val categories = remember { listOf("Tất cả", "Phim bộ", "Phim lẻ", "Hoạt hình") }
 
     suspend fun loadCatalog(refreshing: Boolean = false) {
         if (refreshing) isRefreshing = true else isLoading = true
@@ -109,6 +139,10 @@ fun DiscoverScreen(
                 val latestList = latestRes.getOrNull().orEmpty()
                 if (latestList.isNotEmpty()) {
                     heroMovies = latestList
+                    if (selectedCategory.apiSlug == null) {
+                        currentPage = 1
+                        hasMorePages = latestList.size >= 12
+                    }
                 } else if (latestRes.isFailure && heroMovies.isEmpty()) {
                     errorMessage = latestRes.exceptionOrNull()?.localizedMessage
                         ?: "Không thể tải danh sách phim."
@@ -116,6 +150,13 @@ fun DiscoverScreen(
                 seriesRes.getOrNull()?.let { if (it.isNotEmpty()) seriesMovies = it }
                 singleRes.getOrNull()?.let { if (it.isNotEmpty()) singleMovies = it }
                 animeRes.getOrNull()?.let { if (it.isNotEmpty()) animeMovies = it }
+
+                selectedCategory.apiSlug?.let { catSlug ->
+                    val catList = runCatching { ManiFlixApi.fetchCategory(catSlug, 1) }.getOrNull().orEmpty()
+                    filteredMovies = catList
+                    currentPage = 1
+                    hasMorePages = catList.size >= 12
+                }
             }
         } catch (t: Throwable) {
             if (heroMovies.isEmpty()) {
@@ -124,6 +165,61 @@ fun DiscoverScreen(
         } finally {
             isLoading = false
             isRefreshing = false
+        }
+    }
+
+    suspend fun selectCategory(cat: DiscoverCategoryOption) {
+        selectedCategory = cat
+        currentPage = 1
+        if (cat.apiSlug == null) {
+            filteredMovies = emptyList()
+            hasMorePages = heroMovies.size >= 12
+            return
+        }
+        isCategoryLoading = true
+        try {
+            val items = ManiFlixApi.fetchCategory(cat.apiSlug, 1)
+            filteredMovies = items
+            hasMorePages = items.size >= 12
+        } catch (_: Throwable) {
+            filteredMovies = emptyList()
+            hasMorePages = false
+        } finally {
+            isCategoryLoading = false
+        }
+    }
+
+    suspend fun loadMoreMovies() {
+        if (isLoadingMore || !hasMorePages) return
+        isLoadingMore = true
+        val nextPage = currentPage + 1
+        try {
+            val slug = selectedCategory.apiSlug
+            val nextItems = if (slug == null) {
+                ManiFlixApi.fetchMovies(nextPage)
+            } else {
+                ManiFlixApi.fetchCategory(slug, nextPage)
+            }
+            if (nextItems.isEmpty()) {
+                hasMorePages = false
+            } else {
+                if (slug == null) {
+                    val existing = heroMovies.mapTo(HashSet()) { it.slug }
+                    val unique = nextItems.filter { it.slug !in existing }
+                    heroMovies = heroMovies + unique
+                    hasMorePages = unique.isNotEmpty()
+                } else {
+                    val existing = filteredMovies.mapTo(HashSet()) { it.slug }
+                    val unique = nextItems.filter { it.slug !in existing }
+                    filteredMovies = filteredMovies + unique
+                    hasMorePages = unique.isNotEmpty()
+                }
+                currentPage = nextPage
+            }
+        } catch (_: Throwable) {
+            hasMorePages = false
+        } finally {
+            isLoadingMore = false
         }
     }
 
@@ -141,24 +237,28 @@ fun DiscoverScreen(
         .filter { !AppState.isBlocked(it.slug) }
     val visibleAnime = animeMovies.filter { !AppState.isBlocked(it.slug) }
 
+    val activeGridItems = remember(selectedCategory, heroMovies, filteredMovies, AppState.blockedMovies) {
+        val base = if (selectedCategory.apiSlug == null) heroMovies else filteredMovies
+        base.filter { !AppState.isBlocked(it.slug) }
+    }
+
     val pagerState = rememberPagerState(pageCount = { featuredHero.size.coerceAtLeast(1) })
     val activeHeroUrl = featuredHero.getOrNull(pagerState.currentPage)?.let {
         it.displayPosterUrl.ifBlank { it.displayThumbUrl }
     } ?: featuredHero.firstOrNull()?.displayPosterUrl
 
     val gridColumns = AppPreferences.gridColumnsPhone.coerceIn(2, 3)
-    val latestRows = remember(visibleHero, gridColumns) {
-        visibleHero.chunked(gridColumns)
+    val gridRows = remember(activeGridItems, gridColumns) {
+        activeGridItems.chunked(gridColumns)
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(ManiFlixColors.background(oled))
+            .background(bgColor)
     ) {
         AmbientArtworkBackground(
             imageUrl = activeHeroUrl,
-            oled = oled,
             height = 380.dp
         )
 
@@ -185,7 +285,10 @@ fun DiscoverScreen(
                             text = "Trang chủ",
                             fontSize = 30.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
                         )
 
                         IconButton(
@@ -197,7 +300,7 @@ fun DiscoverScreen(
                             Icon(
                                 imageVector = Icons.Rounded.AccountCircle,
                                 contentDescription = "Tài khoản",
-                                tint = if (AppState.isLoggedIn) accent else Color(0xFFEBEBF0),
+                                tint = if (AppState.isLoggedIn) accent else textPrimary,
                                 modifier = Modifier.size(30.dp)
                             )
                         }
@@ -209,24 +312,25 @@ fun DiscoverScreen(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(categories, key = { it }) { cat ->
-                            val selected = selectedCategory == cat
+                        items(DISCOVER_CATEGORIES, key = { it.label }) { cat ->
+                            val selected = selectedCategory.label == cat.label
                             Box(
                                 modifier = appleGlassSurfaceModifier(
                                     cornerRadius = 50.dp,
                                     highlighted = selected
                                 )
                                     .clickable {
-                                        selectedCategory = cat
                                         triggerHaptic(haptic)
+                                        scope.launch { selectCategory(cat) }
                                     }
                                     .padding(horizontal = 15.dp, vertical = 8.dp)
                             ) {
                                 Text(
-                                    text = cat,
+                                    text = cat.label,
                                     fontSize = 13.sp,
                                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = Color.White
+                                    color = if (selected && ManiFlixColors.isLight()) accent else textPrimary,
+                                    maxLines = 1
                                 )
                             }
                         }
@@ -245,13 +349,13 @@ fun DiscoverScreen(
                             Icon(
                                 imageVector = Icons.Rounded.WifiOff,
                                 contentDescription = null,
-                                tint = Color(0xFF8E8E93),
+                                tint = textSecondary,
                                 modifier = Modifier.size(36.dp)
                             )
                             Text(
                                 text = errorMessage ?: "Lỗi kết nối",
                                 fontSize = 14.sp,
-                                color = Color(0xFFA0A0A8),
+                                color = textSecondary,
                                 textAlign = TextAlign.Center
                             )
                             Button(
@@ -263,7 +367,7 @@ fun DiscoverScreen(
                         }
                     }
                 } else {
-                    if (featuredHero.isNotEmpty()) {
+                    if (featuredHero.isNotEmpty() && selectedCategory.apiSlug == null) {
                         item(key = "hero_pager") {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -295,7 +399,7 @@ fun DiscoverScreen(
                                                     .size(if (active) 7.dp else 5.dp)
                                                     .clip(CircleShape)
                                                     .background(
-                                                        if (active) accent else Color.White.copy(alpha = 0.28f)
+                                                        if (active) accent else textSecondary.copy(alpha = 0.35f)
                                                     )
                                             )
                                         }
@@ -309,14 +413,14 @@ fun DiscoverScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp)
-                                    .height(250.dp)
+                                    .height(276.dp)
                                     .clip(RoundedCornerShape(16.dp))
-                                    .background(Color.White.copy(alpha = 0.06f))
+                                    .background(ManiFlixColors.surfaceElevated())
                             )
                         }
                     }
 
-                    if (AppState.history.isNotEmpty()) {
+                    if (AppState.history.isNotEmpty() && selectedCategory.apiSlug == null) {
                         item(key = "continue_watching") {
                             ContinueWatchingRail(
                                 entries = AppState.history.take(10),
@@ -326,56 +430,74 @@ fun DiscoverScreen(
                         }
                     }
 
-                    if ((selectedCategory == "Tất cả" || selectedCategory == "Phim bộ") &&
-                        visibleSeries.isNotEmpty()
-                    ) {
-                        item(key = "rail_series") {
-                            HorizontalMovieRail(
-                                title = "Phim bộ mới",
-                                items = visibleSeries,
-                                onMovieClick = onMovieClick
-                            )
+                    if (selectedCategory.apiSlug == null) {
+                        if (visibleSeries.isNotEmpty()) {
+                            item(key = "rail_series") {
+                                HorizontalMovieRail(
+                                    title = "Phim bộ mới",
+                                    items = visibleSeries,
+                                    onMovieClick = onMovieClick
+                                )
+                            }
+                        }
+                        if (visibleSingle.isNotEmpty()) {
+                            item(key = "rail_single") {
+                                HorizontalMovieRail(
+                                    title = "Phim lẻ tuyển chọn",
+                                    items = visibleSingle,
+                                    onMovieClick = onMovieClick
+                                )
+                            }
+                        }
+                        if (visibleAnime.isNotEmpty()) {
+                            item(key = "rail_anime") {
+                                HorizontalMovieRail(
+                                    title = "Hoạt hình & Anime",
+                                    items = visibleAnime,
+                                    onMovieClick = onMovieClick
+                                )
+                            }
                         }
                     }
 
-                    if ((selectedCategory == "Tất cả" || selectedCategory == "Phim lẻ") &&
-                        visibleSingle.isNotEmpty()
-                    ) {
-                        item(key = "rail_single") {
-                            HorizontalMovieRail(
-                                title = "Phim lẻ tuyển chọn",
-                                items = visibleSingle,
-                                onMovieClick = onMovieClick
-                            )
-                        }
+                    item(key = "latest_header") {
+                        Text(
+                            text = if (selectedCategory.apiSlug == null) {
+                                "Mới cập nhật"
+                            } else {
+                                selectedCategory.label
+                            },
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = textPrimary,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
                     }
 
-                    if ((selectedCategory == "Tất cả" || selectedCategory == "Hoạt hình") &&
-                        visibleAnime.isNotEmpty()
-                    ) {
-                        item(key = "rail_anime") {
-                            HorizontalMovieRail(
-                                title = "Hoạt hình & Anime",
-                                items = visibleAnime,
-                                onMovieClick = onMovieClick
-                            )
+                    if (isCategoryLoading) {
+                        item(key = "category_loading") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 48.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(color = accent, strokeWidth = 2.5.dp)
+                            }
                         }
-                    }
-
-                    if (latestRows.isNotEmpty()) {
-                        item(key = "latest_header") {
+                    } else if (gridRows.isEmpty()) {
+                        item(key = "empty_grid") {
                             Text(
-                                text = "Mới cập nhật",
-                                fontSize = 19.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                modifier = Modifier.padding(horizontal = 16.dp)
+                                text = "Chưa có phim trong mục này.",
+                                fontSize = 14.sp,
+                                color = textSecondary,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp)
                             )
                         }
-
+                    } else {
                         items(
-                            items = latestRows,
-                            key = { row -> row.joinToString("-") { it.slug } }
+                            items = gridRows,
+                            key = { row -> "${selectedCategory.label}-${row.joinToString("-") { it.slug }}" }
                         ) { rowItems ->
                             Row(
                                 modifier = Modifier
@@ -395,6 +517,41 @@ fun DiscoverScreen(
                                 }
                             }
                         }
+
+                        if (hasMorePages) {
+                            item(key = "load_more_footer") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { scope.launch { loadMoreMovies() } },
+                                        enabled = !isLoadingMore,
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(44.dp)
+                                    ) {
+                                        if (isLoadingMore) {
+                                            CircularProgressIndicator(
+                                                color = accent,
+                                                strokeWidth = 2.dp,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        } else {
+                                            Text(
+                                                text = "Xem thêm phim",
+                                                color = accent,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 14.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -411,15 +568,17 @@ private fun HeroFeaturedCard(
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
     var menuExpanded by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(16.dp)
+    val isFav = AppState.isFavorite(movie.slug)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(256.dp)
+            .height(296.dp)
             .clip(shape)
-            .border(0.7.dp, Color.White.copy(alpha = 0.14f), shape)
+            .border(0.7.dp, Color.White.copy(alpha = 0.16f), shape)
             .combinedClickable(
                 onClick = {
                     triggerHaptic(haptic)
@@ -447,8 +606,8 @@ private fun HeroFeaturedCard(
                 .background(
                     Brush.verticalGradient(
                         0.0f to Color.Transparent,
-                        0.45f to Color.Black.copy(alpha = 0.30f),
-                        1.0f to Color.Black.copy(alpha = 0.90f)
+                        0.36f to Color.Black.copy(alpha = 0.28f),
+                        1.0f to Color.Black.copy(alpha = 0.93f)
                     )
                 )
         )
@@ -456,9 +615,24 @@ private fun HeroFeaturedCard(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
+                .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            val eyebrow = buildString {
+                append("PHIM MỚI")
+                if (movie.year > 0) {
+                    append(" • ${movie.year}")
+                }
+            }
+            Text(
+                text = eyebrow,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp,
+                color = accent
+            )
+
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -471,7 +645,7 @@ private fun HeroFeaturedCard(
                         color = Color.White,
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
-                            .background(accent.copy(alpha = 0.88f))
+                            .background(accent.copy(alpha = 0.90f))
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
@@ -480,21 +654,24 @@ private fun HeroFeaturedCard(
                         text = lang,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Medium,
-                        color = Color(0xFFDADAE0)
+                        color = Color(0xFFE4E4EA)
                     )
                 }
-                movie.year.takeIf { it > 0 }?.let { year ->
-                    Text(
-                        text = "• $year",
-                        fontSize = 10.sp,
-                        color = Color(0xFFAEAEB4)
-                    )
+                movie.category.take(2).forEach { tag ->
+                    if (tag.name.isNotBlank()) {
+                        Text(
+                            text = "• ${tag.name}",
+                            fontSize = 10.sp,
+                            color = Color(0xFFC2C2CA),
+                            maxLines = 1
+                        )
+                    }
                 }
             }
 
             Text(
                 text = movie.name,
-                fontSize = 19.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 maxLines = 2,
@@ -505,10 +682,72 @@ private fun HeroFeaturedCard(
                 Text(
                     text = origin,
                     fontSize = 12.sp,
-                    color = Color(0xFFB4B4BC),
+                    color = Color(0xFFB8B8C0),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(accent)
+                        .clickable {
+                            triggerHaptic(haptic)
+                            scope.launch { AppState.quickWatch(context, movie.slug) }
+                        }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Xem ngay",
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        maxLines = 1
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color.White.copy(alpha = 0.16f))
+                        .border(0.6.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+                        .clickable {
+                            triggerHaptic(haptic)
+                            scope.launch { AppState.toggleFavoriteItem(movie) }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isFav) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkAdd,
+                        contentDescription = null,
+                        tint = if (isFav) accent else Color.White,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Text(
+                        text = if (isFav) "Đã lưu" else "Tủ phim",
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White,
+                        maxLines = 1
+                    )
+                }
             }
         }
 
@@ -531,13 +770,16 @@ private fun ContinueWatchingRail(
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val textPrimary = ManiFlixColors.textPrimary()
+    val textSecondary = ManiFlixColors.textSecondary()
+    val borderColor = ManiFlixColors.cardBorder()
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = "Xem tiếp",
             fontSize = 19.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White,
+            color = textPrimary,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
 
@@ -569,8 +811,8 @@ private fun ContinueWatchingRail(
                             .width(158.dp)
                             .height(94.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White.copy(alpha = 0.06f))
-                            .border(0.6.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                            .background(ManiFlixColors.surfaceElevated())
+                            .border(0.6.dp, borderColor, RoundedCornerShape(10.dp))
                     ) {
                         AsyncImage(
                             model = ImageRequest.Builder(context)
@@ -603,7 +845,7 @@ private fun ContinueWatchingRail(
                             text = cardMovie.name,
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.Medium,
-                            color = Color.White,
+                            color = textPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
@@ -623,7 +865,7 @@ private fun ContinueWatchingRail(
                                 Icon(
                                     imageVector = Icons.Rounded.MoreHoriz,
                                     contentDescription = "Tuỳ chọn phim",
-                                    tint = Color(0xFFA6A6AC),
+                                    tint = textSecondary,
                                     modifier = Modifier.size(15.dp)
                                 )
                             }
@@ -639,7 +881,7 @@ private fun ContinueWatchingRail(
                     Text(
                         text = entry.episodeName.takeIf { it.isNotBlank() } ?: "Xem tiếp",
                         fontSize = 11.sp,
-                        color = Color(0xFF8E8E93),
+                        color = textSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -655,12 +897,13 @@ private fun HorizontalMovieRail(
     items: List<MovieItem>,
     onMovieClick: (slug: String, seedMovie: MovieItem?) -> Unit
 ) {
+    val textPrimary = ManiFlixColors.textPrimary()
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = title,
             fontSize = 19.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White,
+            color = textPrimary,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
 
