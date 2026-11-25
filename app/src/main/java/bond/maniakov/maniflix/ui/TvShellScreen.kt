@@ -1,5 +1,6 @@
 package bond.maniakov.maniflix.ui
 
+import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -74,6 +75,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -157,6 +161,41 @@ fun TvShellScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(bg)
+            .onPreviewKeyEvent { keyEvent ->
+                if (keyEvent.type != KeyEventType.KeyDown) {
+                    return@onPreviewKeyEvent false
+                }
+                when (keyEvent.nativeKeyEvent.keyCode) {
+                    AndroidKeyEvent.KEYCODE_PROG_RED -> {
+                        onClearDetails()
+                        selectedTab = TvTab.DISCOVER
+                        true
+                    }
+                    AndroidKeyEvent.KEYCODE_PROG_GREEN -> {
+                        onClearDetails()
+                        selectedTab = TvTab.SEARCH
+                        true
+                    }
+                    AndroidKeyEvent.KEYCODE_PROG_YELLOW -> {
+                        onClearDetails()
+                        selectedTab = TvTab.LIBRARY
+                        true
+                    }
+                    AndroidKeyEvent.KEYCODE_PROG_BLUE,
+                    AndroidKeyEvent.KEYCODE_INFO,
+                    AndroidKeyEvent.KEYCODE_GUIDE -> {
+                        onClearDetails()
+                        selectedTab = TvTab.NETWORK
+                        true
+                    }
+                    AndroidKeyEvent.KEYCODE_MENU -> {
+                        onClearDetails()
+                        selectedTab = TvTab.SETTINGS
+                        true
+                    }
+                    else -> false
+                }
+            }
             .padding(start = 28.dp, end = 28.dp, top = 20.dp, bottom = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(22.dp)
     ) {

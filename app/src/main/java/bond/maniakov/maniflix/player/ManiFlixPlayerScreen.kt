@@ -326,6 +326,28 @@ fun ManiFlixPlayerScreen(
                             true
                         } else false
                     }
+                    AndroidKeyEvent.KEYCODE_INFO,
+                    AndroidKeyEvent.KEYCODE_GUIDE -> {
+                        showControls = !showControls
+                        if (showControls) bumpAutoHide()
+                        true
+                    }
+                    AndroidKeyEvent.KEYCODE_CAPTIONS -> {
+                        if (!isLocked) {
+                            showControls = true
+                            showAudioDrawer = !showAudioDrawer
+                            bumpAutoHide()
+                            true
+                        } else false
+                    }
+                    AndroidKeyEvent.KEYCODE_MENU -> {
+                        if (!isLocked) {
+                            showControls = true
+                            showEpisodeDrawer = !showEpisodeDrawer
+                            bumpAutoHide()
+                            true
+                        } else false
+                    }
                     AndroidKeyEvent.KEYCODE_BACK -> {
                         when {
                             showEpisodeDrawer -> { showEpisodeDrawer = false; true }

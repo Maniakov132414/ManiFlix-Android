@@ -703,7 +703,7 @@ fun DeviceMonitorScreen(
                             hardware.codecs.forEach { codec ->
                                 val badgeColor = if (codec.supported) downColor else textSecondary
                                 Text(
-                                    text = "${if (codec.supported) "✓" else "×"} ${codec.name}",
+                                    text = "${if (codec.supported) "OK" else "NO"} ${codec.name}",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = badgeColor,
@@ -1094,7 +1094,7 @@ private fun CapacityAssessmentCard(
             ).forEach { (tier, ok) ->
                 val tierColor = if (ok) downColor else accent
                 Text(
-                    text = "${if (ok) "✓" else "•"} $tier",
+                    text = "${if (ok) "OK" else "--"} $tier",
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = tierColor,
@@ -1190,7 +1190,13 @@ private fun readAndroidHardwareTelemetry(context: Context): AndroidHardwareTelem
     val manufacturer = Build.MANUFACTURER.orEmpty().replaceFirstChar {
         if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString()
     }
-    val deviceModel = "$manufacturer ${Build.MODEL} (${Build.DEVICE})".trim()
+    val isSonyBravia = Build.MANUFACTURER.contains("Sony", ignoreCase = true) ||
+        Build.MODEL.contains("BRAVIA", ignoreCase = true)
+    val deviceModel = if (isSonyBravia) {
+        "Sony BRAVIA (Google TV / Android TV) — ${Build.MODEL} (${Build.DEVICE})".trim()
+    } else {
+        "$manufacturer ${Build.MODEL} (${Build.DEVICE})".trim()
+    }
 
     return AndroidHardwareTelemetry(
         deviceModel = deviceModel,

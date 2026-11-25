@@ -169,24 +169,24 @@ jobs:
           name: maniflix-apk
           path: dist/*.apk
 
-      - name: Publish GitHub Release v1.1.0
+      - name: Publish GitHub Release v1.1.1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          NOTES="ManiFlix Native Android & Android TV v1.1.0 (Build 8)
-          - Hỗ trợ Android TV / Google TV / TV Box (Viettel TV360, Mi Box...): Leanback Launcher, banner TV 320x180, giao diện 10-foot Android TV chuyên dụng (ManiFlix-AndroidTV.apk, bond.maniakov.maniflix.tv)
-          - Bản điện thoại & máy tính bảng (ManiFlix.apk, bond.maniakov.maniflix) tối ưu 60/120fps (Coil cache/downsampling, bỏ blur toàn màn hình)
-          - Điều khiển trình phát bằng remote TV (DPAD_CENTER/ENTER, trái/phải tua nhanh, lên/xuống hiện HUD, phím Media, Channel Up/Down, Back)
-          - ManiFlix.apk & ManiFlix-AndroidTV.apk: Bản Universal đa kiến trúc (arm64-v8a, armeabi-v7a, x86, x86_64) tương thích Android 7.0+"
+          NOTES="ManiFlix Native Android & Android TV v1.1.1 (Build 9)
+          - Hỗ trợ đầy đủ Sony BRAVIA (Google TV / Android TV): phím màu remote (Đỏ/Xanh lá/Vàng/Xanh dương), INFO/GUIDE/MENU/CAPTIONS/CHANNEL UP-DOWN & nhận diện phần cứng Sony BRAVIA trong Device Monitor
+          - Hai bản build độc lập: ManiFlix.apk (bond.maniakov.maniflix cho Điện thoại/Tablet) và ManiFlix-AndroidTV.apk (bond.maniakov.maniflix.tv cho Android TV / Google TV / Sony BRAVIA / TV360 Box)
+          - Tối ưu 60/120fps (Coil cache/downsampling, RGB_565 trên TV/RAM thấp, bỏ blur toàn màn hình, 0 emojis)
+          - Tương thích Android 7.0+ (arm64-v8a, armeabi-v7a, x86, x86_64)"
           for attempt in 1 2 3 4 5; do
-            if gh release view v1.1.0 >/dev/null 2>&1; then
-              if gh release upload v1.1.0 dist/*.apk --clobber && \
-                 gh release edit v1.1.0 --title "ManiFlix Android v1.1.0" --notes "$NOTES" --latest; then
+            if gh release view v1.1.1 >/dev/null 2>&1; then
+              if gh release upload v1.1.1 dist/*.apk --clobber && \
+                 gh release edit v1.1.1 --title "ManiFlix Android v1.1.1" --notes "$NOTES" --latest; then
                 exit 0
               fi
             else
-              if gh release create v1.1.0 dist/*.apk --title "ManiFlix Android v1.1.0" --notes "$NOTES" --latest; then
+              if gh release create v1.1.1 dist/*.apk --title "ManiFlix Android v1.1.1" --notes "$NOTES" --latest; then
                 exit 0
               fi
             fi
