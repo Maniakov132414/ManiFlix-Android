@@ -4,7 +4,7 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg"
     android:orientation="vertical"
-    android:padding="12dp">
+    android:padding="10dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -16,31 +16,77 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
             android:text="ManiFlix"
             android:textColor="#FA2D48"
-            android:textSize="13sp"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_tab_continue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:background="@drawable/widget_pill_inactive"
+            android:maxLines="1"
+            android:paddingStart="7dp"
+            android:paddingTop="3dp"
+            android:paddingEnd="7dp"
+            android:paddingBottom="3dp"
+            android:singleLine="true"
+            android:text="Đang xem"
+            android:textColor="#FFFFFF"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_tab_foryou"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:background="@drawable/widget_pill_inactive"
+            android:maxLines="1"
+            android:paddingStart="7dp"
+            android:paddingTop="3dp"
+            android:paddingEnd="7dp"
+            android:paddingBottom="3dp"
+            android:singleLine="true"
+            android:text="Đề xuất"
+            android:textColor="#FFFFFF"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_tab_latest"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_pill_inactive"
+            android:maxLines="1"
+            android:paddingStart="7dp"
+            android:paddingTop="3dp"
+            android:paddingEnd="7dp"
+            android:paddingBottom="3dp"
+            android:singleLine="true"
+            android:text="Mới"
+            android:textColor="#FFFFFF"
+            android:textSize="10sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:paddingStart="6dp"
-            android:paddingEnd="6dp"
-            android:text="• Mới cập nhật"
-            android:textColor="#AEAEB2"
-            android:textSize="11sp" />
+            android:layout_height="1dp"
+            android:layout_weight="1" />
 
         <TextView
             android:id="@+id/widget_refresh"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:maxLines="1"
             android:padding="4dp"
+            android:singleLine="true"
             android:text="Làm mới"
             android:textColor="#E5E5EA"
-            android:textSize="11sp" />
+            android:textSize="10sp" />
     </LinearLayout>
 
     <TextView
@@ -49,7 +95,7 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:gravity="center"
-        android:text="Đang tải danh sách phim mới..."
+        android:text="Đang tải danh sách phim..."
         android:textColor="#AEAEB2"
         android:textSize="12sp"
         android:visibility="gone" />
@@ -78,6 +124,17 @@
                 android:background="@drawable/widget_poster_bg"
                 android:contentDescription="@string/app_name"
                 android:scaleType="centerCrop" />
+
+            <ProgressBar
+                android:id="@+id/widget_progress_1"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="3dp"
+                android:layout_marginTop="3dp"
+                android:max="100"
+                android:progress="0"
+                android:progressDrawable="@drawable/widget_progress_crimson"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/widget_quality_1"
@@ -129,6 +186,17 @@
                 android:contentDescription="@string/app_name"
                 android:scaleType="centerCrop" />
 
+            <ProgressBar
+                android:id="@+id/widget_progress_2"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="3dp"
+                android:layout_marginTop="3dp"
+                android:max="100"
+                android:progress="0"
+                android:progressDrawable="@drawable/widget_progress_crimson"
+                android:visibility="gone" />
+
             <TextView
                 android:id="@+id/widget_quality_2"
                 android:layout_width="wrap_content"
@@ -177,6 +245,17 @@
                 android:background="@drawable/widget_poster_bg"
                 android:contentDescription="@string/app_name"
                 android:scaleType="centerCrop" />
+
+            <ProgressBar
+                android:id="@+id/widget_progress_3"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="3dp"
+                android:layout_marginTop="3dp"
+                android:max="100"
+                android:progress="0"
+                android:progressDrawable="@drawable/widget_progress_crimson"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/widget_quality_3"

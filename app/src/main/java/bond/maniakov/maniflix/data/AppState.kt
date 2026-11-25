@@ -16,6 +16,7 @@ import bond.maniakov.maniflix.model.MovieDetail
 import bond.maniakov.maniflix.model.MovieItem
 import bond.maniakov.maniflix.model.UserInfo
 import bond.maniakov.maniflix.model.UserThemeConfig
+import bond.maniakov.maniflix.widget.ManiFlixWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,10 +34,13 @@ object AppState {
     private const val KEY_BLOCKED = "prefs.blockedMovies.v1"
     private const val KEY_LIKED = "prefs.likedSlugs.v1"
     private const val KEY_LOCAL_HISTORY = "prefs.localHistory.v1"
+    private const val KEY_LOCAL_FAVORITES = "prefs.localFavorites.v1"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var prefs: SharedPreferences? = null
+    private var appContext: Context? = null
     private var bannerJob: Job? = null
+    private var lastWidgetRefreshAtMs: Long = 0L
 
     private var _authToken by mutableStateOf("")
     var authToken: String
@@ -57,12 +61,14 @@ object AppState {
     var showAuthSheet by mutableStateOf(false)
     var isPlayerPresented by mutableStateOf(false)
     var deepLinkSlug by mutableStateOf<String?>(null)
+    var deepLinkAutoWatch by mutableStateOf(false)
     var globalBannerMessage by mutableStateOf<String?>(null)
 
     var onLaunchInternalPlayer: ((Context, MovieDetail, List<EpisodeServer>, Int, Int, Double) -> Unit)? = null
 
     fun init(context: Context) {
         val appCtx = context.applicationContext
+        appContext = appCtx
         val sp = appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs = sp
         UpdateManager.init(appCtx)
@@ -71,6 +77,20 @@ object AppState {
         blockedMovies = decodeBlocked(sp.getString(KEY_BLOCKED, null))
         likedSlugs = sp.getStringSet(KEY_LIKED, emptySet())?.toSet() ?: emptySet()
         history = decodeHistory(sp.getString(KEY_LOCAL_HISTORY, null))
+        favorites = decodeFavorites(sp.getString(KEY_LOCAL_FAVORITES, null))
+    }
+
+    fun requestImmediateWidgetRefresh() {
+        notifyWidget(force = true)
+    }
+
+    private fun notifyWidget(force: Boolean) {
+        val ctx = appContext ?: return
+        val now = System.currentTimeMillis()
+        if (force || (now - lastWidgetRefreshAtMs) >= 15_000L) {
+            lastWidgetRefreshAtMs = now
+            ManiFlixWidgetProvider.requestRefresh(ctx)
+        }
     }
 
     suspend fun bootstrapSession() {
@@ -102,8 +122,10 @@ object AppState {
             }
             favTask.await()?.let { serverFavs ->
                 favorites = serverFavs
+                persistLocalFavorites()
             }
         }
+        notifyWidget(force = true)
     }
 
     suspend fun handleAuthSuccess(token: String, user: UserInfo?) {
@@ -184,6 +206,8 @@ object AppState {
         authToken = ""
         currentUser = null
         favorites = emptyList()
+        persistLocalFavorites()
+        notifyWidget(force = true)
     }
 
     fun isFavorite(slug: String): Boolean = favorites.any { it.slug == slug }
@@ -203,6 +227,8 @@ object AppState {
             val updated = ManiFlixApi.toggleFavorite(token, movie)
             if (updated != null) {
                 favorites = updated
+                persistLocalFavorites()
+                notifyWidget(force = true)
             } else {
                 refreshLibrary()
             }
@@ -223,6 +249,8 @@ object AppState {
             val updated = ManiFlixApi.toggleFavoriteItem(token, item)
             if (updated != null) {
                 favorites = updated
+                persistLocalFavorites()
+                notifyWidget(force = true)
             } else {
                 refreshLibrary()
             }
@@ -236,6 +264,7 @@ object AppState {
         val next = likedSlugs.toMutableSet().apply { add(item.slug) }
         likedSlugs = next
         prefs?.edit()?.putStringSet(KEY_LIKED, next)?.apply()
+        notifyWidget(force = true)
         showBanner("Đã thích: sẽ gợi ý thêm phim tương tự")
     }
 
@@ -243,6 +272,7 @@ object AppState {
         val next = likedSlugs.toMutableSet().apply { remove(item.slug) }
         likedSlugs = next
         prefs?.edit()?.putStringSet(KEY_LIKED, next)?.apply()
+        notifyWidget(force = true)
         showBanner("Đã ghi nhận: giảm bớt phim tương tự")
     }
 
@@ -255,12 +285,14 @@ object AppState {
         )
         blockedMovies = listOf(record) + blockedMovies
         persistBlocked()
+        notifyWidget(force = true)
         showBanner("Đã ẩn \"${item.name}\" khỏi đề xuất")
     }
 
     fun unblockMovie(slug: String) {
         blockedMovies = blockedMovies.filterNot { it.slug == slug }
         persistBlocked()
+        notifyWidget(force = true)
         showBanner("Đã bỏ ẩn phim")
     }
 
@@ -319,6 +351,7 @@ object AppState {
         )
         history = listOf(localEntry) + history.filterNot { it.slug == movie.slug }
         persistLocalHistory()
+        notifyWidget(force = false)
 
         val token = authToken
         if (token.isNotBlank()) {
@@ -338,6 +371,7 @@ object AppState {
     suspend fun deleteHistory(slug: String) {
         history = history.filterNot { it.slug == slug }
         persistLocalHistory()
+        notifyWidget(force = true)
         val token = authToken
         if (token.isNotBlank()) {
             ManiFlixApi.deleteHistory(token, slug)
@@ -476,6 +510,49 @@ object AppState {
                             currentTime = obj.optDouble("currentTime", 0.0),
                             duration = obj.optDouble("duration", 0.0),
                             updatedAt = obj.optLong("updatedAt", 0L)
+                        )
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun persistLocalFavorites() {
+        val arr = JSONArray()
+        for (item in favorites) {
+            arr.put(
+                JSONObject().apply {
+                    put("slug", item.slug)
+                    put("name", item.name)
+                    put("poster", item.poster)
+                    put("year", item.year)
+                    put("quality", item.quality)
+                    put("lang", item.lang)
+                    put("addedAt", item.addedAt)
+                }
+            )
+        }
+        prefs?.edit()?.putString(KEY_LOCAL_FAVORITES, arr.toString())?.apply()
+    }
+
+    private fun decodeFavorites(raw: String?): List<FavoriteEntry> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val arr = JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val slug = obj.optString("slug", "").trim()
+                    if (slug.isEmpty()) continue
+                    add(
+                        FavoriteEntry(
+                            slug = slug,
+                            name = obj.optString("name", slug),
+                            poster = obj.optString("poster", ""),
+                            year = obj.optInt("year", 0),
+                            quality = obj.optString("quality", ""),
+                            lang = obj.optString("lang", ""),
+                            addedAt = obj.optLong("addedAt", 0L)
                         )
                     )
                 }

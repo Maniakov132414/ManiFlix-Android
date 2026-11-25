@@ -161,6 +161,9 @@ class MainActivity : ComponentActivity() {
             val slug = data.pathSegments.firstOrNull { it.isNotBlank() }
                 ?: data.lastPathSegment?.takeIf { it.isNotBlank() && it != "movie" }
             if (!slug.isNullOrBlank()) {
+                val resumeParam = data.getQueryParameter("resume")
+                AppState.deepLinkAutoWatch = resumeParam == "1" ||
+                    resumeParam.equals("true", ignoreCase = true)
                 AppState.deepLinkSlug = slug
             }
         }
@@ -227,6 +230,7 @@ class MainActivity : ComponentActivity() {
         PlayerSessionHolder.activeEngine?.shutdown()
         PlayerSessionHolder.stopCompletely()
         OrientationHelper.forcePortrait(this)
+        AppState.requestImmediateWidgetRefresh()
     }
 }
 
@@ -258,13 +262,19 @@ private fun RootScaffold(
         UpdateManager.checkForUpdates(manual = false)
     }
 
+    val rootContext = LocalContext.current
     val incomingDeepLink = AppState.deepLinkSlug
     LaunchedEffect(incomingDeepLink) {
         if (!incomingDeepLink.isNullOrBlank()) {
+            val autoWatch = AppState.deepLinkAutoWatch
             if (detailStack.lastOrNull()?.slug != incomingDeepLink) {
                 detailStack.add(DetailNavEntry(incomingDeepLink, null))
             }
             AppState.deepLinkSlug = null
+            AppState.deepLinkAutoWatch = false
+            if (autoWatch) {
+                AppState.quickWatch(rootContext, incomingDeepLink)
+            }
         }
     }
 
