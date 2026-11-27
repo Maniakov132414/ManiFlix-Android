@@ -21,6 +21,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.session.MediaSession
@@ -213,8 +214,13 @@ class PlayerEngine(
     private val hlsMediaSourceFactory = HlsMediaSource.Factory(httpDataSourceFactory)
         .setAllowChunklessPreparation(true)
 
+    private val fastLoadControl = DefaultLoadControl.Builder()
+        .setBufferDurationsMs(15_000, 45_000, 1_000, 2_000)
+        .build()
+
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(appContext)
         .setLooper(Looper.getMainLooper())
+        .setLoadControl(fastLoadControl)
         .setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)

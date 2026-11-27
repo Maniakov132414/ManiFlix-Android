@@ -52,8 +52,8 @@ android {
         applicationId = "bond.maniakov.maniflix"
         minSdk = 24
         targetSdk = 35
-        versionCode = 12
-        versionName = "1.2.1"
+        versionCode = 200
+        versionName = "2.0.0"
 
         vectorDrawables {
             useSupportLibrary = true
