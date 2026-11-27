@@ -1767,11 +1767,66 @@ private fun TvSettingsPane() {
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         Text(
-            text = "Cài đặt Android TV",
+            text = AppPreferences.tr("Cài đặt Android TV", "Android TV Settings"),
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             color = textPrimary
         )
+
+        // Language & Default Subtitle
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(ManiFlixColors.surface())
+                .border(0.8.dp, ManiFlixColors.cardBorder(), RoundedCornerShape(16.dp))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = AppPreferences.tr("Ngôn ngữ & Phụ đề mặc định", "Language & Default Subtitle"),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = textPrimary
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                TvActionPill(
+                    label = "Tiếng Việt",
+                    selected = AppPreferences.uiLanguage == "vi",
+                    onClick = {
+                        AppPreferences.uiLanguage = "vi"
+                        AppPreferences.hasCompletedLanguageSetup = true
+                    }
+                )
+                TvActionPill(
+                    label = "English",
+                    selected = AppPreferences.uiLanguage == "en",
+                    onClick = {
+                        AppPreferences.uiLanguage = "en"
+                        AppPreferences.hasCompletedLanguageSetup = true
+                    }
+                )
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                listOf(
+                    "vi" to AppPreferences.tr("Phụ đề: Tiếng Việt", "Subtitle: Vietnamese"),
+                    "en" to AppPreferences.tr("Phụ đề: English", "Subtitle: English"),
+                    "off" to AppPreferences.tr("Phụ đề: Tắt", "Subtitle: Off")
+                ).forEach { (code, label) ->
+                    TvActionPill(
+                        label = label,
+                        selected = AppPreferences.defaultSubtitleLang == code,
+                        onClick = { AppPreferences.defaultSubtitleLang = code }
+                    )
+                }
+            }
+        }
 
         // Theme presets & accent swatches
         Column(

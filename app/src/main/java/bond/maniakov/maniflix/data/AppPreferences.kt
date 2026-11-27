@@ -42,23 +42,23 @@ data class ThemePresetItem(
 
 val THEME_PRESETS: List<ThemePresetItem> = listOf(
     ThemePresetItem(
-        id = "apple-dark",
-        name = "Apple Music Tối",
+        id = "crimson_violet",
+        name = "ManiFlix Mặc Định",
         mode = ThemeMode.DARK,
-        accentHex = 0xFFFA2D48,
-        bgHex = 0xFF121214,
-        surfaceHex = 0xFF1C1C1E
+        accentHex = 0xFFE11D48,
+        bgHex = 0xFF0B0F19,
+        surfaceHex = 0xFF0F172A
     ),
     ThemePresetItem(
-        id = "pure-light",
-        name = "Trắng Tinh Khôi",
-        mode = ThemeMode.LIGHT,
-        accentHex = 0xFFFA2D48,
-        bgHex = 0xFFF4F4F7,
-        surfaceHex = 0xFFFFFFFF
+        id = "netflix_oled",
+        name = "Rạp Đen OLED",
+        mode = ThemeMode.OLED,
+        accentHex = 0xFFE50914,
+        bgHex = 0xFF050507,
+        surfaceHex = 0xFF0D0D12
     ),
     ThemePresetItem(
-        id = "midnight-indigo",
+        id = "midnight_indigo",
         name = "Đêm Xanh Indigo",
         mode = ThemeMode.CUSTOM,
         accentHex = 0xFF5E5CE6,
@@ -66,19 +66,27 @@ val THEME_PRESETS: List<ThemePresetItem> = listOf(
         surfaceHex = 0xFF151C32
     ),
     ThemePresetItem(
-        id = "forest-emerald",
-        name = "Rừng Ngọc Bích",
+        id = "emerald_aurora",
+        name = "Lục Bảo Cực Quang",
         mode = ThemeMode.CUSTOM,
-        accentHex = 0xFF30D158,
-        bgHex = 0xFF0B1612,
-        surfaceHex = 0xFF14241D
+        accentHex = 0xFF10B981,
+        bgHex = 0xFF06120F,
+        surfaceHex = 0xFF0B1D19
     ),
     ThemePresetItem(
-        id = "snow-sky",
-        name = "Tuyết Sáng Indigo",
+        id = "cyber_rose",
+        name = "Cyberpunk Rose",
         mode = ThemeMode.CUSTOM,
-        accentHex = 0xFF0A84FF,
-        bgHex = 0xFFF2F5FA,
+        accentHex = 0xFFFF2D55,
+        bgHex = 0xFF140818,
+        surfaceHex = 0xFF221029
+    ),
+    ThemePresetItem(
+        id = "pure_light",
+        name = "Trắng Tinh Khôi",
+        mode = ThemeMode.LIGHT,
+        accentHex = 0xFFE11D48,
+        bgHex = 0xFFF4F5F8,
         surfaceHex = 0xFFFFFFFF
     )
 )
@@ -127,6 +135,9 @@ object AppPreferences {
     private const val KEY_DOUBLE_TAP = "pref.doubleTapSeekSeconds"
     private const val KEY_LONG_PRESS_SPEED = "pref.longPressSpeed"
     private const val KEY_EXTERNAL_PLAYER = "pref.externalPlayer"
+    private const val KEY_UI_LANGUAGE = "pref.uiLanguage"
+    private const val KEY_DEFAULT_SUBTITLE = "pref.defaultSubtitleLang"
+    private const val KEY_LANG_SETUP_DONE = "pref.hasCompletedLanguageSetup"
 
     private var prefs: SharedPreferences? = null
 
@@ -307,6 +318,34 @@ object AppPreferences {
             prefs?.edit()?.putString(KEY_EXTERNAL_PLAYER, value.name)?.apply()
         }
 
+    private var _uiLanguage by mutableStateOf("vi")
+    var uiLanguage: String
+        get() = _uiLanguage
+        set(value) {
+            val norm = if (value == "en") "en" else "vi"
+            _uiLanguage = norm
+            prefs?.edit()?.putString(KEY_UI_LANGUAGE, norm)?.apply()
+        }
+
+    private var _defaultSubtitleLang by mutableStateOf("vi")
+    var defaultSubtitleLang: String
+        get() = _defaultSubtitleLang
+        set(value) {
+            val norm = if (value == "en" || value == "off") value else "vi"
+            _defaultSubtitleLang = norm
+            prefs?.edit()?.putString(KEY_DEFAULT_SUBTITLE, norm)?.apply()
+        }
+
+    private var _hasCompletedLanguageSetup by mutableStateOf(true)
+    var hasCompletedLanguageSetup: Boolean
+        get() = _hasCompletedLanguageSetup
+        set(value) {
+            _hasCompletedLanguageSetup = value
+            prefs?.edit()?.putBoolean(KEY_LANG_SETUP_DONE, value)?.apply()
+        }
+
+    fun tr(vi: String, en: String): String = if (uiLanguage == "en") en else vi
+
     fun init(context: Context) {
         val sp = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs = sp
@@ -344,6 +383,11 @@ object AppPreferences {
         val speed = sp.getFloat(KEY_LONG_PRESS_SPEED, 2.0f)
         _longPressSpeed = if (speed >= 1.25f) speed else 2.0f
         _externalPlayer = parseEnum(sp.getString(KEY_EXTERNAL_PLAYER, null), ExternalPlayerOption.INTERNAL)
+        val savedLang = sp.getString(KEY_UI_LANGUAGE, "vi")
+        _uiLanguage = if (savedLang == "en") "en" else "vi"
+        val savedSub = sp.getString(KEY_DEFAULT_SUBTITLE, "vi")
+        _defaultSubtitleLang = if (savedSub == "en" || savedSub == "off") savedSub else "vi"
+        _hasCompletedLanguageSetup = sp.getBoolean(KEY_LANG_SETUP_DONE, false)
     }
 
     fun applyPreset(preset: ThemePresetItem) {

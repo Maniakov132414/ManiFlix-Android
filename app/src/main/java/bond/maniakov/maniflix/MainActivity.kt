@@ -21,6 +21,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -542,6 +543,92 @@ private fun RootScaffold(
                 isForced = false,
                 onDismiss = { UpdateManager.snoozeSoftUpdateFor24Hours() }
             )
+        }
+
+        if (!AppPreferences.hasCompletedLanguageSetup) {
+            LanguageOnboardingOverlay(
+                onSelectLanguage = { lang ->
+                    AppPreferences.uiLanguage = lang
+                    AppPreferences.defaultSubtitleLang = lang
+                    AppPreferences.hasCompletedLanguageSetup = true
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun LanguageOnboardingOverlay(
+    onSelectLanguage: (String) -> Unit
+) {
+    val surface = ManiFlixColors.surface()
+    val border = ManiFlixColors.cardBorder()
+    val accent = ManiFlixColors.accent()
+    val textPrimary = ManiFlixColors.textPrimary()
+    val textSecondary = ManiFlixColors.textSecondary()
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.78f))
+            .clickable(enabled = false) {},
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 440.dp)
+                .padding(24.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(surface)
+                .border(1.dp, border, RoundedCornerShape(22.dp))
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Chọn ngôn ngữ / Choose Language",
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold,
+                color = textPrimary
+            )
+            Text(
+                text = "Ngôn ngữ giao diện và phụ đề mặc định sẽ được tự động thiết lập theo lựa chọn của bạn.",
+                fontSize = 13.sp,
+                color = textSecondary
+            )
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                listOf(
+                    Triple("vi", "Tiếng Việt", "Giao diện Tiếng Việt + Phụ đề Tiếng Việt mặc định"),
+                    Triple("en", "English", "English UI + English Subtitles by default")
+                ).forEach { (code, title, subtitle) ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(ManiFlixColors.surfaceElevated())
+                            .border(1.dp, accent.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                            .focusable()
+                            .clickable { onSelectLanguage(code) }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = title,
+                            fontSize = 15.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = textPrimary
+                        )
+                        Text(
+                            text = subtitle,
+                            fontSize = 12.sp,
+                            color = textSecondary
+                        )
+                    }
+                }
+            }
         }
     }
 }

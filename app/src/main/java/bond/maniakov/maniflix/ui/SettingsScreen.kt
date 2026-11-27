@@ -144,11 +144,56 @@ fun SettingsScreen(
         item(key = "settings_title") {
             SettingsMaxWidthContainer {
                 Text(
-                    text = "Cài đặt",
+                    text = AppPreferences.tr("Cài đặt", "Settings"),
                     fontSize = 30.sp,
                     fontWeight = FontWeight.Bold,
                     color = textPrimary,
                     modifier = Modifier.statusBarsPadding()
+                )
+            }
+        }
+
+        // Ngôn ngữ & Phụ đề
+        item(key = "sec_language_sub") {
+            SettingsSection(
+                title = AppPreferences.tr("Ngôn ngữ & Phụ đề", "Language & Subtitles"),
+                textSecondary = textSecondary
+            ) {
+                val langLabel = if (AppPreferences.uiLanguage == "en") "English" else "Tiếng Việt"
+                SettingsDropdownRow(
+                    title = AppPreferences.tr("Ngôn ngữ ứng dụng", "App Language"),
+                    selectedLabel = langLabel,
+                    options = listOf("vi" to "Tiếng Việt", "en" to "English"),
+                    labelFor = { it.second },
+                    textPrimary = textPrimary,
+                    textSecondary = textSecondary,
+                    accent = accent,
+                    onSelect = { (code, _) ->
+                        triggerHaptic(haptic)
+                        AppPreferences.uiLanguage = code
+                        AppPreferences.hasCompletedLanguageSetup = true
+                    }
+                )
+                SettingsDivider(borderColor)
+                val subOptions = listOf(
+                    "vi" to AppPreferences.tr("Tiếng Việt", "Vietnamese"),
+                    "en" to "English",
+                    "off" to AppPreferences.tr("Tắt phụ đề", "Off")
+                )
+                val subLabel = subOptions.firstOrNull { it.first == AppPreferences.defaultSubtitleLang }?.second
+                    ?: AppPreferences.tr("Tiếng Việt", "Vietnamese")
+                SettingsDropdownRow(
+                    title = AppPreferences.tr("Phụ đề mặc định", "Default Subtitle"),
+                    selectedLabel = subLabel,
+                    options = subOptions,
+                    labelFor = { it.second },
+                    textPrimary = textPrimary,
+                    textSecondary = textSecondary,
+                    accent = accent,
+                    onSelect = { (code, _) ->
+                        triggerHaptic(haptic)
+                        AppPreferences.defaultSubtitleLang = code
+                    }
                 )
             }
         }

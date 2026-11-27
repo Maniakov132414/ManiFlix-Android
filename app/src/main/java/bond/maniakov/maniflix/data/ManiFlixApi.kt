@@ -49,7 +49,7 @@ data class SpeedtestPingResult(
 object ManiFlixApi {
     private const val CONNECT_TIMEOUT_MS = 18_000
     private const val READ_TIMEOUT_MS = 18_000
-    private const val USER_AGENT = "ManiFlix-Android/1.0.6"
+    private const val USER_AGENT = "ManiFlix-Android/1.2.0"
 
     private const val CF_PING_URL = "https://speed.cloudflare.com/__down?bytes=0"
     private const val CF_DOWN_5MB_URL = "https://speed.cloudflare.com/__down?bytes=5000000"
@@ -227,11 +227,16 @@ object ManiFlixApi {
         (totalUploaded * 8.0) / dtSec / 1_000_000.0
     }
 
-    fun cleanM3u8Url(rawM3u8: String): String {
+    fun cleanM3u8Url(rawM3u8: String, extraParams: Map<String, String> = emptyMap()): String {
         val trimmed = rawM3u8.trim()
         if (trimmed.isEmpty()) return ""
         val encoded = URLEncoder.encode(trimmed, "UTF-8")
-        return "${AppPreferences.BASE_URL}/api/clean-m3u8?url=$encoded"
+        val sub = URLEncoder.encode(AppPreferences.defaultSubtitleLang, "UTF-8")
+        val sb = StringBuilder("${AppPreferences.BASE_URL}/api/clean-m3u8?url=$encoded&sub=$sub")
+        for ((k, v) in extraParams) {
+            sb.append("&").append(URLEncoder.encode(k, "UTF-8")).append("=").append(URLEncoder.encode(v, "UTF-8"))
+        }
+        return sb.toString()
     }
 
     suspend fun fetchMovies(page: Int = 1): List<MovieItem> {

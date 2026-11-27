@@ -346,9 +346,13 @@ class PlayerEngine(
             return
         }
 
+        val isVsmov = rawM3u8.contains("#vsmov.m3u8")
         val resolvedUrl = if (useClean) {
             currentSourceLabel = "Chuẩn"
             ManiFlixApi.cleanM3u8Url(rawM3u8)
+        } else if (isVsmov) {
+            currentSourceLabel = "Dự phòng (Proxy)"
+            ManiFlixApi.cleanM3u8Url(rawM3u8, mapOf("ap" to "1"))
         } else {
             currentSourceLabel = "Dự phòng"
             rawM3u8
@@ -384,6 +388,15 @@ class PlayerEngine(
 
         val source = hlsMediaSourceFactory.createMediaSource(mediaItem)
         exoPlayer.setMediaSource(source)
+        val defSub = AppPreferences.defaultSubtitleLang.lowercase()
+        val trackParams = exoPlayer.trackSelectionParameters.buildUpon()
+        if (defSub == "off") {
+            trackParams.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+        } else {
+            trackParams.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            trackParams.setPreferredTextLanguage(defSub)
+        }
+        exoPlayer.trackSelectionParameters = trackParams.build()
         exoPlayer.playbackParameters = PlaybackParameters(playbackRate)
         applyComfortVolume()
         exoPlayer.prepare()
@@ -395,7 +408,7 @@ class PlayerEngine(
     private fun scheduleFailoverWatchdog(ep: EpisodeItem) {
         watchdogJob?.cancel()
         watchdogJob = scope.launch {
-            delay(8_500L)
+            delay(18_000L)
             if (!isShutDown && isBuffering && currentTime < 0.5 && !didFailoverThisEpisode) {
                 tryFailoverStream(ep, "Đang đổi sang nguồn dự phòng...")
             }
