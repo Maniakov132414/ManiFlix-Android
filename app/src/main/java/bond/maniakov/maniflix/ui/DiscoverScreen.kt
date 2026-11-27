@@ -593,15 +593,22 @@ private fun HeroFeaturedCard(
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     var menuExpanded by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(22.dp)
     val isFav = AppState.isFavorite(movie.slug)
+    val heroRim = Brush.linearGradient(
+        colors = listOf(
+            Color.White.copy(alpha = 0.36f),
+            accent.copy(alpha = 0.30f),
+            Color.White.copy(alpha = 0.10f)
+        )
+    )
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(height)
             .clip(shape)
-            .border(0.7.dp, Color.White.copy(alpha = 0.16f), shape)
+            .border(1.dp, heroRim, shape)
             .combinedClickable(
                 onClick = {
                     triggerHaptic(haptic)
@@ -650,56 +657,54 @@ private fun HeroFeaturedCard(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            val eyebrow = buildString {
-                append("PHIM MỚI")
-                if (movie.year > 0) {
-                    append(" • ${movie.year}")
-                }
-            }
-            Text(
-                text = eyebrow,
-                fontSize = 10.5.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp,
-                color = accent
-            )
-
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 movie.quality.takeIf { it.isNotBlank() }?.let { q ->
+                    val is4k = q.contains("4K", ignoreCase = true) || q.contains("2160")
                     Text(
-                        text = q,
+                        text = if (is4k) "4K Ultra HD" else q,
                         fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        color = if (is4k) Color(0xFF090D16) else Color.White,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(accent.copy(alpha = 0.90f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (is4k) Brush.horizontalGradient(listOf(Color(0xFFFBBF24), Color(0xFFD97706)))
+                                else Brush.horizontalGradient(listOf(accent.copy(alpha = 0.92f), accent.copy(alpha = 0.78f)))
+                            )
+                            .padding(horizontal = 9.dp, vertical = 3.dp)
                     )
                 }
                 movie.lang.takeIf { it.isNotBlank() }?.let { lang ->
                     Text(
                         text = lang,
                         fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFFE4E4EA)
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF6EE7B7),
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(Color(0xFF10B981).copy(alpha = 0.22f))
+                            .border(0.6.dp, Color(0xFF34D399).copy(alpha = 0.45f), CircleShape)
+                            .padding(horizontal = 9.dp, vertical = 3.dp)
                     )
                 }
-                movie.category.take(2).forEach { tag ->
-                    if (tag.name.isNotBlank()) {
-                        Text(
-                            text = "• ${tag.name}",
-                            fontSize = 10.sp,
-                            color = Color(0xFFC2C2CA),
-                            maxLines = 1
-                        )
-                    }
+                if (movie.year > 0) {
+                    Text(
+                        text = "${movie.year}",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFE2E8F0),
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.14f))
+                            .border(0.6.dp, Color.White.copy(alpha = 0.24f), CircleShape)
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
                 }
             }
 
@@ -725,18 +730,19 @@ private fun HeroFeaturedCard(
             Spacer(modifier = Modifier.height(2.dp))
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(CircleShape)
                         .background(accent)
+                        .border(0.7.dp, Color.White.copy(alpha = 0.30f), CircleShape)
                         .clickable {
                             triggerHaptic(haptic)
                             scope.launch { AppState.quickWatch(context, movie.slug) }
                         }
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
@@ -749,7 +755,7 @@ private fun HeroFeaturedCard(
                     Text(
                         text = "Xem ngay",
                         fontSize = 12.5.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         color = Color.White,
                         maxLines = 1
                     )
@@ -757,14 +763,14 @@ private fun HeroFeaturedCard(
 
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(CircleShape)
                         .background(Color.White.copy(alpha = 0.16f))
-                        .border(0.6.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+                        .border(0.7.dp, Color.White.copy(alpha = 0.30f), CircleShape)
                         .clickable {
                             triggerHaptic(haptic)
                             scope.launch { AppState.toggleFavoriteItem(movie) }
                         }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 14.dp, vertical = 8.5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {

@@ -160,12 +160,20 @@ fun MoviePosterCard(
     val haptic = LocalHapticFeedback.current
     var menuExpanded by remember { mutableStateOf(false) }
 
-    val cardShape = RoundedCornerShape(10.dp)
+    val cardShape = RoundedCornerShape(14.dp)
     val badgeText = movie.quality.takeIf { it.isNotBlank() }
         ?: movie.episodeCurrent.takeIf { it.isNotBlank() }
+    val is4kBadge = badgeText?.let { it.contains("4K", ignoreCase = true) || it.contains("2160") } == true
     val primaryText = ManiFlixColors.textPrimary()
     val secondaryText = ManiFlixColors.textSecondary()
     val borderColor = ManiFlixColors.cardBorder()
+    val liquidBorder = Brush.linearGradient(
+        colors = listOf(
+            Color.White.copy(alpha = 0.30f),
+            borderColor,
+            Color.White.copy(alpha = 0.08f)
+        )
+    )
 
     Column(
         modifier = modifier
@@ -187,7 +195,7 @@ fun MoviePosterCard(
                 .aspectRatio(2f / 3f)
                 .clip(cardShape)
                 .background(ManiFlixColors.surfaceElevated())
-                .border(0.6.dp, borderColor, cardShape)
+                .border(0.85.dp, liquidBorder, cardShape)
         ) {
             val primaryUrl = movie.displayPosterUrl.ifBlank { movie.displayThumbUrl }
             val secondaryUrl = movie.displayThumbUrl.ifBlank { movie.displayPosterUrl }
@@ -212,18 +220,24 @@ fun MoviePosterCard(
             )
 
             if (!badgeText.isNullOrBlank()) {
+                val pillBg = if (is4kBadge) {
+                    Brush.horizontalGradient(listOf(Color(0xFFFBBF24), Color(0xFFD97706)))
+                } else {
+                    Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.74f), Color.Black.copy(alpha = 0.64f)))
+                }
                 Text(
                     text = badgeText,
                     fontSize = 9.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    color = if (is4kBadge) Color(0xFF090D16) else Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(6.dp)
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(Color.Black.copy(alpha = 0.72f))
+                        .padding(7.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(pillBg)
+                        .border(0.5.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(6.dp))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 )
             }

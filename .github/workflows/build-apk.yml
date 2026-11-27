@@ -169,23 +169,23 @@ jobs:
           name: maniflix-apk
           path: dist/*.apk
 
-      - name: Publish GitHub Release v2.0.0
+      - name: Publish GitHub Release v2.0.1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          NOTES="ManiFlix Native Android & Android TV v2.0.0 (Build 200)
+          NOTES="ManiFlix Native Android & Android TV v2.0.1 (Build 201)
           - Chọn ngôn ngữ lần đầu mở app (Tiếng Việt / English), tự động đồng bộ ngôn ngữ giao diện và phụ đề mặc định.
           - Cài đặt chia tab mới, nút chọn phụ đề trực tiếp trên trình phát, đồng bộ 6 chủ đề và tăng tốc khởi phát phim sạch không quảng cáo.
           - Hai bản build độc lập: ManiFlix.apk (bond.maniakov.maniflix cho Điện thoại/Tablet) và ManiFlix-AndroidTV.apk (bond.maniakov.maniflix.tv cho Android TV / Google TV / Sony BRAVIA / TV360 Box)"
           for attempt in 1 2 3 4 5; do
-            if gh release view v2.0.0 >/dev/null 2>&1; then
-              if gh release upload v2.0.0 dist/*.apk --clobber && \
-                 gh release edit v2.0.0 --title "ManiFlix Android v2.0.0" --notes "$NOTES" --latest; then
+            if gh release view v2.0.1 >/dev/null 2>&1; then
+              if gh release upload v2.0.1 dist/*.apk --clobber && \
+                 gh release edit v2.0.1 --title "ManiFlix Android v2.0.1" --notes "$NOTES" --latest; then
                 exit 0
               fi
             else
-              if gh release create v2.0.0 dist/*.apk --title "ManiFlix Android v2.0.0" --notes "$NOTES" --latest; then
+              if gh release create v2.0.1 dist/*.apk --title "ManiFlix Android v2.0.1" --notes "$NOTES" --latest; then
                 exit 0
               fi
             fi

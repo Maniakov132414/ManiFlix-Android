@@ -3,6 +3,7 @@ package bond.maniakov.maniflix.ui
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -80,7 +81,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import bond.maniakov.maniflix.R
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -199,14 +202,17 @@ fun TvShellScreen(
             .padding(start = 28.dp, end = 28.dp, top = 20.dp, bottom = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(22.dp)
     ) {
-        // Left 10-foot Leanback Navigation Rail
+        // Left 10-foot Liquid Glass Navigation Rail
+        val railRim = Brush.verticalGradient(
+            colors = listOf(Color.White.copy(alpha = 0.28f), borderColor)
+        )
         Column(
             modifier = Modifier
-                .width(204.dp)
+                .width(208.dp)
                 .fillMaxHeight()
-                .clip(RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(22.dp))
                 .background(surface.copy(alpha = 0.94f))
-                .border(0.8.dp, borderColor, RoundedCornerShape(18.dp))
+                .border(1.dp, railRim, RoundedCornerShape(22.dp))
                 .padding(14.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
@@ -216,20 +222,14 @@ fun TvShellScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Box(
+                    Image(
+                        painter = painterResource(id = R.mipmap.ic_launcher),
+                        contentDescription = "ManiFlix",
                         modifier = Modifier
-                            .size(34.dp)
+                            .size(36.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(accent),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Tv,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(19.dp)
-                        )
-                    }
+                            .border(0.8.dp, Color.White.copy(alpha = 0.28f), RoundedCornerShape(10.dp))
+                    )
                     Column {
                         Text(
                             text = "ManiFlix",
@@ -924,10 +924,16 @@ private fun TvSpotlightBanner(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(242.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .height(250.dp)
+            .clip(RoundedCornerShape(22.dp))
             .background(surface)
-            .border(0.8.dp, ManiFlixColors.cardBorder(), RoundedCornerShape(18.dp))
+            .border(
+                1.dp,
+                Brush.linearGradient(
+                    listOf(Color.White.copy(alpha = 0.34f), ManiFlixColors.cardBorder(), Color.White.copy(alpha = 0.10f))
+                ),
+                RoundedCornerShape(22.dp)
+            )
     ) {
         AsyncImage(
             model = ImageRequest.Builder(context)
