@@ -69,6 +69,7 @@ import androidx.compose.material.icons.rounded.Replay10
 import androidx.compose.material.icons.rounded.ScreenRotation
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.Button
@@ -167,6 +168,7 @@ fun ManiFlixPlayerScreen(
     var isLocked by remember { mutableStateOf(false) }
     var showEpisodeDrawer by remember { mutableStateOf(false) }
     var showAudioDrawer by remember { mutableStateOf(false) }
+    var showSubtitleDrawer by remember { mutableStateOf(false) }
 
     var isLongPressBoosting by remember { mutableStateOf(false) }
     var seekPulseText by remember { mutableStateOf<String?>(null) }
@@ -251,8 +253,8 @@ fun ManiFlixPlayerScreen(
         }
     }
 
-    LaunchedEffect(isInPiP, showControls, showEpisodeDrawer, showAudioDrawer) {
-        if (!isInPiP && !showEpisodeDrawer && !showAudioDrawer) {
+    LaunchedEffect(isInPiP, showControls, showEpisodeDrawer, showAudioDrawer, showSubtitleDrawer) {
+        if (!isInPiP && !showEpisodeDrawer && !showAudioDrawer && !showSubtitleDrawer) {
             if (showControls && isTvMode && !isLocked) {
                 runCatching { playPauseFocusRequester.requestFocus() }
             } else {
@@ -335,7 +337,7 @@ fun ManiFlixPlayerScreen(
                     AndroidKeyEvent.KEYCODE_CAPTIONS -> {
                         if (!isLocked) {
                             showControls = true
-                            showAudioDrawer = !showAudioDrawer
+                            showSubtitleDrawer = !showSubtitleDrawer
                             bumpAutoHide()
                             true
                         } else false
@@ -352,12 +354,13 @@ fun ManiFlixPlayerScreen(
                         when {
                             showEpisodeDrawer -> { showEpisodeDrawer = false; true }
                             showAudioDrawer -> { showAudioDrawer = false; true }
+                            showSubtitleDrawer -> { showSubtitleDrawer = false; true }
                             isTvMode && showControls -> { showControls = false; true }
                             else -> { handleClose(); true }
                         }
                     }
                     else -> {
-                        if (showEpisodeDrawer || showAudioDrawer) {
+                        if (showEpisodeDrawer || showAudioDrawer || showSubtitleDrawer) {
                             false
                         } else if (!showControls) {
                             when (code) {
@@ -1133,6 +1136,33 @@ fun ManiFlixPlayerScreen(
                                     clickable = true,
                                     horizontalPadding = 9.dp,
                                     onClick = {
+                                        bumpAutoHide()
+                                        triggerHaptic()
+                                        showSubtitleDrawer = true
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Subtitles,
+                                        contentDescription = "Phụ đề",
+                                        tint = if (engine.selectedSubtitleId != "off") accentColor else Color.White,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = engine.currentSubtitleShortLabel,
+                                        color = Color.White,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                GlassPill(
+                                    clickable = true,
+                                    horizontalPadding = 9.dp,
+                                    onClick = {
                                         engine.cycleAspectMode()
                                         bumpAutoHide()
                                         triggerHaptic()
@@ -1183,6 +1213,88 @@ fun ManiFlixPlayerScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // Subtitle Modal Sheet
+    if (showSubtitleDrawer) {
+        val subSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showSubtitleDrawer = false },
+            sheetState = subSheetState,
+            containerColor = Color(0xFF18181B),
+            contentColor = Color.White
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Phụ đề",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    TextButton(onClick = { showSubtitleDrawer = false }) {
+                        Text("Xong", color = accentColor, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+
+                if (engine.availableSubtitles.isEmpty()) {
+                    Text(
+                        text = "Tập này không có phụ đề rời.",
+                        fontSize = 13.sp,
+                        color = Color.White.copy(alpha = 0.65f),
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                } else {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    ) {
+                        engine.availableSubtitles.forEach { sub ->
+                            val selected = engine.selectedSubtitleId == sub.id
+                            FilterChip(
+                                selected = selected,
+                                onClick = {
+                                    engine.selectSubtitle(sub.id)
+                                    showSubtitleDrawer = false
+                                },
+                                label = { Text(sub.label, fontSize = 13.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = accentColor,
+                                    selectedLabelColor = Color.White,
+                                    containerColor = Color.White.copy(alpha = 0.08f),
+                                    labelColor = Color.White.copy(alpha = 0.9f)
+                                )
+                            )
+                        }
+                        val offSelected = engine.selectedSubtitleId == "off"
+                        FilterChip(
+                            selected = offSelected,
+                            onClick = {
+                                engine.selectSubtitle("off")
+                                showSubtitleDrawer = false
+                            },
+                            label = { Text("Tắt phụ đề", fontSize = 13.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = accentColor,
+                                selectedLabelColor = Color.White,
+                                containerColor = Color.White.copy(alpha = 0.08f),
+                                labelColor = Color.White.copy(alpha = 0.9f)
+                            )
+                        )
                     }
                 }
             }

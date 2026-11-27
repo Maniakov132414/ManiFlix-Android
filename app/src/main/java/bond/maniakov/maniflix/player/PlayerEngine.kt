@@ -17,6 +17,8 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -41,6 +43,13 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+
+data class SubtitleTrackOption(
+    val id: String,
+    val label: String,
+    val groupIndex: Int,
+    val trackIndex: Int
+)
 
 enum class PlayerAspectMode(val title: String) {
     FIT_SAFE("Gốc"),
@@ -140,6 +149,19 @@ class PlayerEngine(
     var aspectMode by mutableStateOf(PlayerAspectMode.FIT_SAFE)
     var flipHorizontal by mutableStateOf(false)
     var flipVertical by mutableStateOf(false)
+    var availableSubtitles by mutableStateOf<List<SubtitleTrackOption>>(emptyList())
+    var selectedSubtitleId by mutableStateOf("off")
+
+    val currentSubtitleShortLabel: String
+        get() {
+            if (selectedSubtitleId == "off") return "Phụ đề"
+            val cur = availableSubtitles.firstOrNull { it.id == selectedSubtitleId } ?: return "Phụ đề"
+            return when (cur.label) {
+                "Tiếng Việt" -> "Sub: VI"
+                "English" -> "Sub: EN"
+                else -> cur.label
+            }
+        }
 
     val currentEpisode: EpisodeItem?
         get() = servers.getOrNull(serverIndex)?.serverData?.getOrNull(episodeIndex)
@@ -250,6 +272,39 @@ class PlayerEngine(
             SpatialAudioController.attachToAudioSession(appContext, audioSessionId)
         }
 
+        override fun onTracksChanged(tracks: Tracks) {
+            val found = mutableListOf<SubtitleTrackOption>()
+            var activeId: String? = null
+            tracks.groups.forEachIndexed { gIdx, group ->
+                if (group.type == C.TRACK_TYPE_TEXT) {
+                    for (tIdx in 0 until group.length) {
+                        val fmt = group.getTrackFormat(tIdx)
+                        val lang = (fmt.language ?: "").lowercase()
+                        val rawLabel = (fmt.label ?: "").trim()
+                        val lower = rawLabel.lowercase()
+                        val isVi = lang.startsWith("vi") || lower.contains("việt") || lower.contains("viet")
+                        val isEn = lang.startsWith("en") || lower.contains("english") || lower.contains("anh")
+                        val cleanLabel = when {
+                            isVi -> "Tiếng Việt"
+                            isEn -> "English"
+                            rawLabel.isNotBlank() -> rawLabel
+                            lang.isNotBlank() -> lang.uppercase()
+                            else -> "Phụ đề ${found.size + 1}"
+                        }
+                        val optId = "${gIdx}_${tIdx}"
+                        found.add(SubtitleTrackOption(id = optId, label = cleanLabel, groupIndex = gIdx, trackIndex = tIdx))
+                        if (group.isTrackSelected(tIdx)) {
+                            activeId = optId
+                        }
+                    }
+                }
+            }
+            val viEn = found.filter { it.label == "Tiếng Việt" || it.label == "English" }
+            availableSubtitles = if (viEn.isNotEmpty()) viEn else found
+            val disabled = exoPlayer.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
+            selectedSubtitleId = if (disabled || activeId == null) "off" else activeId!!
+        }
+
         override fun onPlayerError(error: PlaybackException) {
             val ep = currentEpisode
             val desc = error.localizedMessage ?: error.message ?: "Không tải được luồng phát"
@@ -268,6 +323,29 @@ class PlayerEngine(
         applyComfortVolume()
         startTicker()
         loadCurrentEpisode()
+    }
+
+    fun selectSubtitle(id: String) {
+        if (id == "off") {
+            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                .buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .build()
+            selectedSubtitleId = "off"
+            showToast("Đã tắt phụ đề")
+            return
+        }
+        val opt = availableSubtitles.firstOrNull { it.id == id } ?: return
+        val group = exoPlayer.currentTracks.groups.getOrNull(opt.groupIndex) ?: return
+        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+            .buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            .addOverride(TrackSelectionOverride(group.mediaTrackGroup, opt.trackIndex))
+            .build()
+        selectedSubtitleId = id
+        showToast("Phụ đề: ${opt.label}")
     }
 
     fun formatTime(seconds: Double): String = Companion.formatTime(seconds)

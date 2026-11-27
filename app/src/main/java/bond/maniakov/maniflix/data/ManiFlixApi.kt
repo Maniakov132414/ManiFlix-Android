@@ -49,7 +49,7 @@ data class SpeedtestPingResult(
 object ManiFlixApi {
     private const val CONNECT_TIMEOUT_MS = 18_000
     private const val READ_TIMEOUT_MS = 18_000
-    private const val USER_AGENT = "ManiFlix-Android/1.2.0"
+    private const val USER_AGENT = "ManiFlix-Android/1.2.1"
 
     private const val CF_PING_URL = "https://speed.cloudflare.com/__down?bytes=0"
     private const val CF_DOWN_5MB_URL = "https://speed.cloudflare.com/__down?bytes=5000000"
