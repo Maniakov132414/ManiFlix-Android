@@ -201,6 +201,7 @@ data class FranchiseSeason(
     val quality: String = "",
     val lang: String = "",
     val isRecap: Boolean = false,
+    val isLiveAction: Boolean = false,
     val episodeCurrent: String = "",
     val baseTitle: String = "",
     val baseTitleVi: String = "",
@@ -227,7 +228,8 @@ data class FranchiseSeason(
             label = fallbackRaw,
             uiLang = uiLang,
             prefixes = listOf(baseTitleVi, baseTitleEn, baseTitleRomaji, baseTitle),
-            hasSeason2 = hasSeason2
+            hasSeason2 = hasSeason2,
+            isLiveAction = isLiveAction
         )
     }
 
@@ -235,11 +237,12 @@ data class FranchiseSeason(
         fun localizedHeader(uiLang: String, seasons: List<FranchiseSeason>): String {
             val isEn = uiLang == "en"
             val first = seasons.firstOrNull()
-            val cleanBase = if (isEn) {
+            val rawBase = if (isEn) {
                 first?.baseTitleEn?.trim().orEmpty().ifEmpty { first?.baseTitle?.trim().orEmpty() }
             } else {
                 first?.baseTitleVi?.trim().orEmpty().ifEmpty { first?.baseTitle?.trim().orEmpty() }
             }
+            val cleanBase = TitleLocalizer.cleanFranchiseTitle(rawBase)
             val count = seasons.size
             return if (cleanBase.isEmpty()) {
                 if (isEn) "Franchise ($count parts)" else "Các phần phim ($count)"
@@ -360,49 +363,109 @@ object TitleLocalizer {
         return primary to picked.joinToString(" • ")
     }
 
+    private val TRIM_FRANCHISE_SEP_REGEX = Regex("^[\\s:\\-–—•|·/.,]+|[\\s:\\-–—•|·/]+$")
+    private val MULTI_SPACE_REGEX = Regex("\\s{2,}")
+    private val TV_SERIES_ONLY_REGEX = Regex("^tv\\s*series$", RegexOption.IGNORE_CASE)
+    private val MOVIE_TAG_REGEX = Regex("\\s*\\((?:Movie|Phim\\s*Lẻ)\\)\\s*", RegexOption.IGNORE_CASE)
+    private val LIVE_ACTION_TAG_REGEX = Regex("\\(\\s*live[\\s\\-]*action\\s*\\)", RegexOption.IGNORE_CASE)
+
+    fun cleanFranchiseTitle(raw: String?): String =
+        MULTI_SPACE_REGEX.replace(TRIM_FRANCHISE_SEP_REGEX.replace(raw.orEmpty(), ""), " ").trim()
+
+    private fun buildOrthoPattern(prefix: String): String {
+        val clean = cleanFranchiseTitle(prefix)
+        if (clean.length < 3) return ""
+        val sb = StringBuilder()
+        var i = 0
+        while (i < clean.length) {
+            val ch = clean[i]
+            when {
+                ch.isWhitespace() -> {
+                    while (i + 1 < clean.length && clean[i + 1].isWhitespace()) i++
+                    sb.append("[\\s:\\-–—•|·]+")
+                }
+                ch == '\'' || ch == '’' || ch == '‘' || ch == '`' -> sb.append("['’‘`]?")
+                ch == 'ì' || ch == 'ỳ' || ch == 'Ì' || ch == 'Ỳ' -> sb.append("[ìỳÌỲ]")
+                ch == 'í' || ch == 'ý' || ch == 'Í' || ch == 'Ý' -> sb.append("[íýÍÝ]")
+                ch == 'ỉ' || ch == 'ỷ' || ch == 'Ỉ' || ch == 'Ỷ' -> sb.append("[ỉỷỈỶ]")
+                ch == 'ĩ' || ch == 'ỹ' || ch == 'Ĩ' || ch == 'Ỹ' -> sb.append("[ĩỹĨỸ]")
+                ch == 'ị' || ch == 'ỵ' || ch == 'Ị' || ch == 'Ỵ' -> sb.append("[ịỵỊỴ]")
+                else -> sb.append(Regex.escape(ch.toString()))
+            }
+            i++
+        }
+        return sb.toString()
+    }
+
     fun stripFranchisePrefix(
         label: String,
         uiLang: String,
         prefixes: List<String>,
-        hasSeason2: Boolean
+        hasSeason2: Boolean,
+        isLiveAction: Boolean = false
     ): String {
-        val trimmed = label.trim()
-        if (trimmed.isEmpty()) {
-            return if (hasSeason2) (if (uiLang == "en") "Season 1" else "Phần 1") else "TV Series"
-        }
-        val sortedPrefixes = prefixes
-            .map { it.trim() }
-            .filter { it.length >= 3 }
-            .sortedByDescending { it.length }
+        var cur = label.trim()
+        val rawPicked = cur
+        if (cur.isNotEmpty()) {
+            val sortedPats = prefixes
+                .map { cleanFranchiseTitle(it) }
+                .filter { it.length >= 3 }
+                .sortedByDescending { it.length }
+                .map { buildOrthoPattern(it) }
+                .filter { it.isNotEmpty() }
 
-        for (prefix in sortedPrefixes) {
-            if (trimmed.startsWith(prefix, ignoreCase = true)) {
-                var rest = trimmed.substring(prefix.length).trim()
-                while (rest.isNotEmpty() && rest.first() in charArrayOf(':', '-', '–', '—', '·', '|', '/')) {
-                    rest = rest.drop(1).trim()
+            for (pat in sortedPats) {
+                if (Regex("^$pat[\\s:!\\-–—.]*$", RegexOption.IGNORE_CASE).matches(cur)) {
+                    cur = ""
+                    break
                 }
-                if (rest.isEmpty()) {
-                    return if (hasSeason2) (if (uiLang == "en") "Season 1" else "Phần 1") else "TV Series"
+                val leadRe = Regex("^$pat(?:\\s*[:\\-–—!|•/]+\\s*|\\s+(?=(?:Movie|Phần|Phan|Season|SS|Mùa|OVA|ONA|Special|SP|Mini|Idol|Shinonome|Chapter|Part|Arc|Episode|Tập|\\d+|II|III|IV|V|VI)\\b))", RegexOption.IGNORE_CASE)
+                if (leadRe.containsMatchIn(cur)) {
+                    cur = leadRe.replaceFirst(cur, "").trim()
+                    break
                 }
-                if (uiLang == "en") {
-                    rest = PHAN_PREFIX_REGEX.replace(rest, "Season $1")
+                val trailRe = Regex("(?:\\s*[:\\-–—|•]+\\s*)$pat(\\s*\\((?:Live-Action|Movie|OVA|ONA|Special|TV)\\))?[\\s.!]*$", RegexOption.IGNORE_CASE)
+                if (trailRe.containsMatchIn(cur)) {
+                    val cand = trailRe.replace(cur, "$1").trim()
+                    if (cand.length >= 2) {
+                        cur = cand
+                        break
+                    }
                 }
-                return rest
             }
         }
-        return trimmed
+        cur = Regex("^[:\\-–—•|\\s]+|[:\\-–—•|\\s]+$").replace(cur, "").trim()
+        cur = if (cur.isEmpty() || TV_SERIES_ONLY_REGEX.matches(cur)) {
+            if (TV_SERIES_ONLY_REGEX.matches(rawPicked)) "TV Series"
+            else if (hasSeason2) (if (uiLang == "en") "Season 1" else "Phần 1") else "TV Series"
+        } else if (uiLang == "en") {
+            PHAN_PREFIX_REGEX.replace(cur, "Season $1")
+        } else {
+            cur
+        }
+        if (isLiveAction) {
+            cur = MULTI_SPACE_REGEX.replace(MOVIE_TAG_REGEX.replace(cur, " "), " ").trim()
+            if (!LIVE_ACTION_TAG_REGEX.containsMatchIn(cur)) {
+                cur = "$cur (Live-Action)"
+            }
+        }
+        return cur
     }
 
     fun sortFranchiseSeasons(seasons: List<FranchiseSeason>, baseTitle: String?): List<FranchiseSeason> {
         if (seasons.size <= 1) return seasons
         if (seasons.any { it.sortIndex >= 0 }) {
             return seasons.withIndex().sortedWith(
-                compareBy<IndexedValue<FranchiseSeason>> { if (it.value.sortIndex >= 0) it.value.sortIndex else (1000 + it.index) }
+                compareBy<IndexedValue<FranchiseSeason>> { it.value.isLiveAction }
+                    .thenBy { if (it.value.sortIndex >= 0) it.value.sortIndex else (1000 + it.index) }
                     .thenBy { it.index }
             ).map { it.value }
         }
         val baseNorm = normKey(baseTitle.orEmpty())
         return seasons.withIndex().sortedWith { a, b ->
+            if (a.value.isLiveAction != b.value.isLiveAction) {
+                return@sortedWith if (a.value.isLiveAction) 1 else -1
+            }
             val ay = if (a.value.year > 0) a.value.year else 9999
             val by = if (b.value.year > 0) b.value.year else 9999
             if (ay != by) return@sortedWith ay.compareTo(by)

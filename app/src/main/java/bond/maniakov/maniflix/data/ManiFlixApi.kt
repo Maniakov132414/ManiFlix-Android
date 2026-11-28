@@ -324,6 +324,7 @@ object ManiFlixApi {
                     quality = s.optString("quality", ""),
                     lang = s.optString("lang", ""),
                     isRecap = s.optBoolean("isRecap", false),
+                    isLiveAction = s.optBoolean("isLiveAction", false),
                     episodeCurrent = s.optString("episodeCurrent", ""),
                     baseTitle = baseTitle,
                     baseTitleVi = baseTitleVi,
