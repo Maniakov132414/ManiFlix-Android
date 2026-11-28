@@ -71,10 +71,6 @@ import bond.maniakov.maniflix.data.ManiFlixApi
 import bond.maniakov.maniflix.model.HistoryEntry
 import bond.maniakov.maniflix.model.MovieItem
 import bond.maniakov.maniflix.ui.theme.ManiFlixColors
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import coil.size.Precision
-import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
@@ -134,38 +130,25 @@ fun DiscoverScreen(
         if (refreshing) isRefreshing = true else isLoading = true
         errorMessage = null
         try {
-            coroutineScope {
-                val latestJob = async { runCatching { ManiFlixApi.fetchMovies(1) } }
-                val seriesJob = async { runCatching { ManiFlixApi.fetchCategory("phim-bo", 1) } }
-                val singleJob = async { runCatching { ManiFlixApi.fetchCategory("phim-le", 1) } }
-                val animeJob = async { runCatching { ManiFlixApi.fetchCategory("hoat-hinh", 1) } }
-
-                val latestRes = latestJob.await()
-                val seriesRes = seriesJob.await()
-                val singleRes = singleJob.await()
-                val animeRes = animeJob.await()
-
-                val latestList = latestRes.getOrNull().orEmpty()
-                if (latestList.isNotEmpty()) {
-                    heroMovies = latestList
-                    if (selectedCategory.apiSlug == null) {
-                        currentPage = 1
-                        hasMorePages = latestList.size >= 12
-                    }
-                } else if (latestRes.isFailure && heroMovies.isEmpty()) {
-                    errorMessage = latestRes.exceptionOrNull()?.localizedMessage
-                        ?: "Không thể tải danh sách phim."
-                }
-                seriesRes.getOrNull()?.let { if (it.isNotEmpty()) seriesMovies = it }
-                singleRes.getOrNull()?.let { if (it.isNotEmpty()) singleMovies = it }
-                animeRes.getOrNull()?.let { if (it.isNotEmpty()) animeMovies = it }
-
-                selectedCategory.apiSlug?.let { catSlug ->
-                    val catList = runCatching { ManiFlixApi.fetchCategory(catSlug, 1) }.getOrNull().orEmpty()
-                    filteredMovies = catList
+            val boot = AppState.fetchBootstrapDiscover(forceRefresh = refreshing)
+            if (boot.heroMovies.isNotEmpty()) {
+                heroMovies = boot.heroMovies
+                if (selectedCategory.apiSlug == null) {
                     currentPage = 1
-                    hasMorePages = catList.size >= 12
+                    hasMorePages = boot.heroMovies.size >= 12
                 }
+            } else if (heroMovies.isEmpty()) {
+                errorMessage = "Không thể tải danh sách phim."
+            }
+            if (boot.seriesMovies.isNotEmpty()) seriesMovies = boot.seriesMovies
+            if (boot.singleMovies.isNotEmpty()) singleMovies = boot.singleMovies
+            if (boot.animeMovies.isNotEmpty()) animeMovies = boot.animeMovies
+
+            selectedCategory.apiSlug?.let { catSlug ->
+                val catList = runCatching { ManiFlixApi.fetchCategory(catSlug, 1) }.getOrNull().orEmpty()
+                filteredMovies = catList
+                currentPage = 1
+                hasMorePages = catList.size >= 12
             }
         } catch (t: Throwable) {
             if (heroMovies.isEmpty()) {
@@ -622,22 +605,14 @@ private fun HeroFeaturedCard(
     ) {
         val heroPrimary = movie.displayThumbUrl.ifBlank { movie.displayPosterUrl }
         val heroFallback = movie.displayPosterUrl.ifBlank { movie.displayThumbUrl }
-        var useHeroFallback by remember(movie.slug) { mutableStateOf(false) }
 
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(if (!useHeroFallback) heroPrimary else heroFallback)
-                .size(960, 540)
-                .precision(Precision.INEXACT)
-                .crossfade(true)
-                .build(),
+        CachedPosterImage(
+            url = heroPrimary,
+            fallbackUrl = heroFallback,
             contentDescription = movie.name,
             contentScale = ContentScale.Crop,
-            onError = {
-                if (!useHeroFallback && heroFallback.isNotBlank() && heroFallback != heroPrimary) {
-                    useHeroFallback = true
-                }
-            },
+            maxWidthPx = 960,
+            maxHeightPx = 540,
             modifier = Modifier.fillMaxSize()
         )
 
@@ -855,15 +830,12 @@ private fun ContinueWatchingRail(
                             .background(ManiFlixColors.surfaceElevated())
                             .border(0.6.dp, borderColor, RoundedCornerShape(10.dp))
                     ) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(entry.displayPosterUrl)
-                                .size(320, 190)
-                                .precision(Precision.INEXACT)
-                                .crossfade(true)
-                                .build(),
+                        CachedPosterImage(
+                            url = entry.displayPosterUrl,
                             contentDescription = cardMovie.name,
                             contentScale = ContentScale.Crop,
+                            maxWidthPx = 320,
+                            maxHeightPx = 190,
                             modifier = Modifier.fillMaxSize()
                         )
 

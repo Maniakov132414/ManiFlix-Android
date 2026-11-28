@@ -1,9 +1,12 @@
 package bond.maniakov.maniflix.data
 
+import android.content.Context
+import android.util.LruCache
 import bond.maniakov.maniflix.model.AdMarker
 import bond.maniakov.maniflix.model.AndroidVersionConfig
 import bond.maniakov.maniflix.model.AppVariantInfo
 import bond.maniakov.maniflix.model.AuthResult
+import bond.maniakov.maniflix.model.DiscoverBootstrapResult
 import bond.maniakov.maniflix.model.EpisodeItem
 import bond.maniakov.maniflix.model.EpisodeServer
 import bond.maniakov.maniflix.model.FavoriteEntry
@@ -16,25 +19,28 @@ import bond.maniakov.maniflix.model.MovieTag
 import bond.maniakov.maniflix.model.TitleLocalizer
 import bond.maniakov.maniflix.model.UserInfo
 import bond.maniakov.maniflix.model.UserThemeConfig
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.Cache
 import okhttp3.ConnectionPool
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okio.Buffer
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
+import java.io.File
 import java.net.URLEncoder
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.max
@@ -48,14 +54,65 @@ data class SpeedtestPingResult(
 )
 
 object ManiFlixApi {
-    private const val CONNECT_TIMEOUT_MS = 18_000
-    private const val READ_TIMEOUT_MS = 18_000
-    private const val USER_AGENT = "ManiFlix-Android/2.0.0"
+    private const val CONNECT_TIMEOUT_SEC = 12L
+    private const val READ_TIMEOUT_SEC = 18L
+    private const val WRITE_TIMEOUT_SEC = 18L
+    private const val DISK_CACHE_BYTES = 64L * 1024L * 1024L
+    private const val USER_AGENT = "ManiFlix-Android/2.0.2"
 
     private const val CF_PING_URL = "https://speed.cloudflare.com/__down?bytes=0"
     private const val CF_DOWN_5MB_URL = "https://speed.cloudflare.com/__down?bytes=5000000"
     private const val CF_DOWN_1MB_URL = "https://speed.cloudflare.com/__down?bytes=1000000"
     private const val CF_UP_URL = "https://speed.cloudflare.com/__up"
+
+    private data class CachedJsonEntry(
+        val body: String,
+        val expiresAtMs: Long
+    )
+
+    @Volatile
+    private var cacheRootDir: File? = null
+    private val apiScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val sharedConnectionPool = ConnectionPool(12, 5, TimeUnit.MINUTES)
+    private val jsonMemoryCache = LruCache<String, CachedJsonEntry>(160)
+    private val inflightGets = ConcurrentHashMap<String, CompletableDeferred<String>>()
+
+    fun init(context: Context) {
+        if (cacheRootDir == null) {
+            cacheRootDir = context.applicationContext.cacheDir
+        }
+    }
+
+    private val apiClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectionPool(sharedConnectionPool)
+            .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+            .connectTimeout(CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
+            .readTimeout(READ_TIMEOUT_SEC, TimeUnit.SECONDS)
+            .writeTimeout(WRITE_TIMEOUT_SEC, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .apply {
+                cacheRootDir?.let { dir ->
+                    cache(Cache(File(dir, "maniflix_api_cache"), DISK_CACHE_BYTES))
+                }
+            }
+            .build()
+    }
+
+    val sharedImageOkHttpClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectionPool(sharedConnectionPool)
+            .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .apply {
+                cacheRootDir?.let { dir ->
+                    cache(Cache(File(dir, "maniflix_image_cache"), DISK_CACHE_BYTES))
+                }
+            }
+            .build()
+    }
 
     private val speedtestClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -238,6 +295,61 @@ object ManiFlixApi {
             sb.append("&").append(URLEncoder.encode(k, "UTF-8")).append("=").append(URLEncoder.encode(v, "UTF-8"))
         }
         return sb.toString()
+    }
+
+    suspend fun fetchBootstrapDiscover(
+        token: String? = null,
+        forceRefresh: Boolean = false
+    ): DiscoverBootstrapResult {
+        val cleanToken = token?.takeIf { it.isNotBlank() }
+        val bootstrap = runCatching {
+            val obj = requestJsonObject(
+                pathAndQuery = "/api/bootstrap/discover",
+                token = cleanToken,
+                forceRefresh = forceRefresh
+            )
+            val hero = parseMovieList(obj.optJSONArray("heroMovies"))
+            val series = parseMovieList(obj.optJSONArray("seriesMovies"))
+            val single = parseMovieList(obj.optJSONArray("singleMovies"))
+            val anime = parseMovieList(obj.optJSONArray("animeMovies"))
+            if (hero.isEmpty() && series.isEmpty() && single.isEmpty() && anime.isEmpty()) {
+                null
+            } else {
+                val user = obj.optJSONObject("user")?.let { parseUserInfo(it) }
+                val history = obj.optJSONArray("history")?.let { parseHistoryList(it) }
+                val favorites = obj.optJSONArray("favorites")?.let { parseFavoriteList(it) }
+                DiscoverBootstrapResult(
+                    heroMovies = hero,
+                    seriesMovies = series,
+                    singleMovies = single,
+                    animeMovies = anime,
+                    user = user,
+                    history = history,
+                    favorites = favorites,
+                    fromBootstrapEndpoint = true
+                )
+            }
+        }.getOrNull()
+
+        if (bootstrap != null) {
+            return bootstrap
+        }
+
+        // Clean fallback to 4 parallel calls if bootstrap endpoint is unavailable
+        return coroutineScope {
+            val latestJob = async { fetchMovies(1) }
+            val seriesJob = async { runCatching { fetchCategory("phim-bo", 1) }.getOrDefault(emptyList()) }
+            val singleJob = async { runCatching { fetchCategory("phim-le", 1) }.getOrDefault(emptyList()) }
+            val animeJob = async { runCatching { fetchCategory("hoat-hinh", 1) }.getOrDefault(emptyList()) }
+
+            DiscoverBootstrapResult(
+                heroMovies = latestJob.await(),
+                seriesMovies = seriesJob.await(),
+                singleMovies = singleJob.await(),
+                animeMovies = animeJob.await(),
+                fromBootstrapEndpoint = false
+            )
+        }
     }
 
     suspend fun fetchMovies(page: Int = 1): List<MovieItem> {
@@ -534,45 +646,113 @@ object ManiFlixApi {
         }
     }
 
+    private fun cacheTtlMsForPath(pathAndQuery: String, hasToken: Boolean): Long {
+        if (hasToken && !pathAndQuery.startsWith("/api/bootstrap/discover")) return 0L
+        return when {
+            pathAndQuery.startsWith("/api/bootstrap/discover") -> if (hasToken) 20_000L else 60_000L
+            pathAndQuery.startsWith("/api/movie/") -> 180_000L
+            pathAndQuery.startsWith("/api/franchise") -> 180_000L
+            pathAndQuery.startsWith("/api/ads/") -> 180_000L
+            pathAndQuery.startsWith("/api/movies") -> 60_000L
+            pathAndQuery.startsWith("/api/category") -> 60_000L
+            pathAndQuery.startsWith("/api/search") -> 60_000L
+            else -> 0L
+        }
+    }
+
     private suspend fun requestJsonObject(
         pathAndQuery: String,
         method: String = "GET",
         body: JSONObject? = null,
-        token: String? = null
-    ): JSONObject = withContext(Dispatchers.IO) {
-        val url = URL("${AppPreferences.BASE_URL}$pathAndQuery")
-        val conn = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = method
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = READ_TIMEOUT_MS
-            setRequestProperty("Accept", "application/json")
-            setRequestProperty("User-Agent", USER_AGENT)
-            if (!token.isNullOrBlank()) {
-                setRequestProperty("Authorization", "Bearer $token")
-            }
-            if (body != null) {
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        token: String? = null,
+        forceRefresh: Boolean = false
+    ): JSONObject {
+        val isGet = method.equals("GET", ignoreCase = true) && body == null
+        val cleanToken = token?.takeIf { it.isNotBlank() }
+        val ttlMs = if (isGet) cacheTtlMsForPath(pathAndQuery, cleanToken != null) else 0L
+        val cacheKey = if (cleanToken != null) "$pathAndQuery|tok=${cleanToken.hashCode()}" else pathAndQuery
+
+        if (isGet && ttlMs > 0L && !forceRefresh) {
+            val cached = synchronized(jsonMemoryCache) { jsonMemoryCache.get(cacheKey) }
+            if (cached != null && System.currentTimeMillis() < cached.expiresAtMs) {
+                return if (cached.body.isBlank()) JSONObject() else JSONObject(cached.body)
             }
         }
-        try {
-            if (body != null) {
-                OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
-                    writer.write(body.toString())
-                    writer.flush()
+
+        if (isGet) {
+            val existing = inflightGets[cacheKey]
+            if (existing != null) {
+                val text = existing.await()
+                return if (text.isBlank()) JSONObject() else JSONObject(text)
+            }
+
+            val deferred = CompletableDeferred<String>()
+            val raced = inflightGets.putIfAbsent(cacheKey, deferred)
+            if (raced != null) {
+                val text = raced.await()
+                return if (text.isBlank()) JSONObject() else JSONObject(text)
+            }
+
+            apiScope.launch {
+                try {
+                    val text = executeOkHttpRequest(pathAndQuery, method, body, cleanToken, forceRefresh)
+                    if (ttlMs > 0L) {
+                        synchronized(jsonMemoryCache) {
+                            jsonMemoryCache.put(
+                                cacheKey,
+                                CachedJsonEntry(text, System.currentTimeMillis() + ttlMs)
+                            )
+                        }
+                    }
+                    deferred.complete(text)
+                } catch (t: Throwable) {
+                    deferred.completeExceptionally(t)
+                } finally {
+                    inflightGets.remove(cacheKey, deferred)
                 }
             }
-            val code = conn.responseCode
-            val stream = if (code in 200..299) conn.inputStream else (conn.errorStream ?: conn.inputStream)
-            val text = stream?.let { s ->
-                BufferedReader(InputStreamReader(s, Charsets.UTF_8)).use { it.readText() }
-            }.orEmpty()
+
+            val text = deferred.await()
+            return if (text.isBlank()) JSONObject() else JSONObject(text)
+        }
+
+        val text = withContext(Dispatchers.IO) {
+            executeOkHttpRequest(pathAndQuery, method, body, cleanToken, forceRefresh = true)
+        }
+        return if (text.isBlank()) JSONObject() else JSONObject(text)
+    }
+
+    private fun executeOkHttpRequest(
+        pathAndQuery: String,
+        method: String,
+        body: JSONObject?,
+        token: String?,
+        forceRefresh: Boolean
+    ): String {
+        val url = "${AppPreferences.BASE_URL}$pathAndQuery"
+        val reqBuilder = Request.Builder()
+            .url(url)
+            .header("Accept", "application/json")
+            .header("User-Agent", USER_AGENT)
+        if (!token.isNullOrBlank()) {
+            reqBuilder.header("Authorization", "Bearer $token")
+        }
+        if (forceRefresh) {
+            reqBuilder.header("Cache-Control", "no-cache")
+        }
+        if (body != null) {
+            val reqBody = body.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+            reqBuilder.method(method, reqBody)
+        } else {
+            reqBuilder.method(method, null)
+        }
+        apiClient.newCall(reqBuilder.build()).execute().use { resp ->
+            val code = resp.code
+            val text = resp.body?.string().orEmpty()
             if (code !in 200..299) {
                 throw ApiHttpException(code, text.ifBlank { "HTTP $code" })
             }
-            if (text.isBlank()) JSONObject() else JSONObject(text)
-        } finally {
-            conn.disconnect()
+            return text
         }
     }
 

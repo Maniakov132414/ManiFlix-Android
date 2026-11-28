@@ -60,9 +60,6 @@ import bond.maniakov.maniflix.data.AppState
 import bond.maniakov.maniflix.model.MovieItem
 import bond.maniakov.maniflix.player.PlayerEngine
 import bond.maniakov.maniflix.ui.theme.ManiFlixColors
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import coil.size.Precision
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -192,15 +189,12 @@ fun LibraryScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(context)
-                                            .data(entry.displayPosterUrl)
-                                            .size(240, 145)
-                                            .precision(Precision.INEXACT)
-                                            .crossfade(true)
-                                            .build(),
+                                    CachedPosterImage(
+                                        url = entry.displayPosterUrl,
                                         contentDescription = entry.name.ifBlank { entry.slug },
                                         contentScale = ContentScale.Crop,
+                                        maxWidthPx = 240,
+                                        maxHeightPx = 145,
                                         modifier = Modifier
                                             .size(width = 96.dp, height = 58.dp)
                                             .clip(RoundedCornerShape(8.dp))
@@ -387,15 +381,12 @@ fun LibraryScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(context)
-                                            .data(item.displayPosterUrl)
-                                            .size(160, 220)
-                                            .precision(Precision.INEXACT)
-                                            .crossfade(true)
-                                            .build(),
+                                    CachedPosterImage(
+                                        url = item.displayPosterUrl,
                                         contentDescription = item.name,
                                         contentScale = ContentScale.Crop,
+                                        maxWidthPx = 160,
+                                        maxHeightPx = 220,
                                         modifier = Modifier
                                             .size(width = 52.dp, height = 74.dp)
                                             .clip(RoundedCornerShape(8.dp))

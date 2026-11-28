@@ -1071,7 +1071,45 @@ fun ManiFlixPlayerScreen(
                                             activeTrackColor = accentColor,
                                             inactiveTrackColor = Color.White.copy(alpha = 0.25f)
                                         ),
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .onPreviewKeyEvent { keyEvent ->
+                                                val code = keyEvent.nativeKeyEvent.keyCode
+                                                when (code) {
+                                                    AndroidKeyEvent.KEYCODE_DPAD_CENTER,
+                                                    AndroidKeyEvent.KEYCODE_ENTER,
+                                                    AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                                                        if (keyEvent.type == KeyEventType.KeyDown) {
+                                                            if (isDraggingScrubber) {
+                                                                isDraggingScrubber = false
+                                                            }
+                                                            engine.togglePlayPause()
+                                                            bumpAutoHide()
+                                                            triggerHaptic()
+                                                        }
+                                                        true
+                                                    }
+                                                    AndroidKeyEvent.KEYCODE_DPAD_LEFT -> {
+                                                        if (keyEvent.type == KeyEventType.KeyDown && !isLocked) {
+                                                            isDraggingScrubber = false
+                                                            engine.seekRelative(-10.0)
+                                                            triggerSeekPulse("-10s")
+                                                            bumpAutoHide()
+                                                        }
+                                                        true
+                                                    }
+                                                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                                        if (keyEvent.type == KeyEventType.KeyDown && !isLocked) {
+                                                            isDraggingScrubber = false
+                                                            engine.seekRelative(10.0)
+                                                            triggerSeekPulse("+10s")
+                                                            bumpAutoHide()
+                                                        }
+                                                        true
+                                                    }
+                                                    else -> false
+                                                }
+                                            }
                                     )
                                 }
 

@@ -103,9 +103,6 @@ import bond.maniakov.maniflix.model.MovieDetail
 import bond.maniakov.maniflix.model.MovieItem
 import bond.maniakov.maniflix.player.PlayerEngine
 import bond.maniakov.maniflix.ui.theme.ManiFlixColors
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import coil.size.Precision
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -517,12 +514,8 @@ private fun TvMovieCard(
     onFocused: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
-    val context = LocalContext.current
     val textPrimary = ManiFlixColors.textPrimary()
     val textSecondary = ManiFlixColors.textSecondary()
-    val primaryUrl = movie.displayPosterUrl.ifBlank { movie.displayThumbUrl }
-    val secondaryUrl = movie.displayThumbUrl.ifBlank { movie.displayPosterUrl }
-    var useFallback by remember(movie.slug) { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.width(width),
@@ -542,20 +535,15 @@ private fun TvMovieCard(
                     .fillMaxSize()
                     .background(ManiFlixColors.surfaceElevated())
             ) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(if (!useFallback) primaryUrl else secondaryUrl)
-                        .size(320, 480)
-                        .precision(Precision.INEXACT)
-                        .crossfade(true)
-                        .build(),
+                val primaryUrl = movie.displayPosterUrl.ifBlank { movie.displayThumbUrl }
+                val secondaryUrl = movie.displayThumbUrl.ifBlank { movie.displayPosterUrl }
+                CachedPosterImage(
+                    url = primaryUrl,
+                    fallbackUrl = secondaryUrl,
                     contentDescription = movie.name,
                     contentScale = ContentScale.Crop,
-                    onError = {
-                        if (!useFallback && secondaryUrl.isNotBlank() && secondaryUrl != primaryUrl) {
-                            useFallback = true
-                        }
-                    },
+                    maxWidthPx = 320,
+                    maxHeightPx = 480,
                     modifier = Modifier.fillMaxSize()
                 )
 
@@ -634,25 +622,18 @@ private fun TvDiscoverPane(
         isLoading = true
         errorMessage = null
         try {
-            coroutineScope {
-                val homeTask = async { runCatching { ManiFlixApi.fetchMovies(1) }.getOrNull() }
-                val seriesTask = async { runCatching { ManiFlixApi.fetchCategory("phim-bo", 1) }.getOrNull() }
-                val singleTask = async { runCatching { ManiFlixApi.fetchCategory("phim-le", 1) }.getOrNull() }
-                val animeTask = async { runCatching { ManiFlixApi.fetchCategory("hoat-hinh", 1) }.getOrNull() }
-
-                val home = homeTask.await().orEmpty()
-                if (home.isEmpty()) {
-                    errorMessage = "Không thể kết nối máy chủ ManiFlix."
-                } else {
-                    heroMovies = home
-                    if (spotlightMovie == null) spotlightMovie = home.firstOrNull()
-                    hasMorePages = home.size >= 12
-                }
-                seriesMovies = seriesTask.await().orEmpty()
-                singleMovies = singleTask.await().orEmpty()
-                animeMovies = animeTask.await().orEmpty()
-                currentPage = 1
+            val boot = AppState.fetchBootstrapDiscover()
+            if (boot.heroMovies.isEmpty()) {
+                errorMessage = "Không thể kết nối máy chủ ManiFlix."
+            } else {
+                heroMovies = boot.heroMovies
+                if (spotlightMovie == null) spotlightMovie = boot.heroMovies.firstOrNull()
+                hasMorePages = boot.heroMovies.size >= 12
             }
+            seriesMovies = boot.seriesMovies
+            singleMovies = boot.singleMovies
+            animeMovies = boot.animeMovies
+            currentPage = 1
         } finally {
             isLoading = false
         }
@@ -935,15 +916,13 @@ private fun TvSpotlightBanner(
                 RoundedCornerShape(22.dp)
             )
     ) {
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(backdropUrl)
-                .size(960, 540)
-                .precision(Precision.INEXACT)
-                .crossfade(true)
-                .build(),
+        CachedPosterImage(
+            url = backdropUrl,
+            fallbackUrl = movie.displayPosterUrl,
             contentDescription = movie.name,
             contentScale = ContentScale.Crop,
+            maxWidthPx = 960,
+            maxHeightPx = 540,
             modifier = Modifier.fillMaxSize()
         )
 
@@ -1066,15 +1045,12 @@ private fun TvContinueWatchingRail(
                                 .fillMaxSize()
                                 .background(ManiFlixColors.surfaceElevated())
                         ) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(context)
-                                    .data(entry.displayPosterUrl)
-                                    .size(320, 190)
-                                    .precision(Precision.INEXACT)
-                                    .crossfade(true)
-                                    .build(),
+                            CachedPosterImage(
+                                url = entry.displayPosterUrl,
                                 contentDescription = entry.name,
                                 contentScale = ContentScale.Crop,
+                                maxWidthPx = 320,
+                                maxHeightPx = 190,
                                 modifier = Modifier.fillMaxSize()
                             )
                             LinearProgressIndicator(
@@ -1401,15 +1377,12 @@ private fun TvMovieDetailPane(
             horizontalArrangement = Arrangement.spacedBy(22.dp),
             verticalAlignment = Alignment.Top
         ) {
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(posterUrl)
-                    .size(320, 480)
-                    .precision(Precision.INEXACT)
-                    .crossfade(true)
-                    .build(),
+            CachedPosterImage(
+                url = posterUrl,
                 contentDescription = title,
                 contentScale = ContentScale.Crop,
+                maxWidthPx = 320,
+                maxHeightPx = 480,
                 modifier = Modifier
                     .width(180.dp)
                     .aspectRatio(2f / 3f)
@@ -1640,15 +1613,12 @@ private fun TvLibraryPane(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                                     ) {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(context)
-                                                .data(entry.displayPosterUrl)
-                                                .size(240, 145)
-                                                .precision(Precision.INEXACT)
-                                                .crossfade(true)
-                                                .build(),
+                                        CachedPosterImage(
+                                            url = entry.displayPosterUrl,
                                             contentDescription = entry.name,
                                             contentScale = ContentScale.Crop,
+                                            maxWidthPx = 240,
+                                            maxHeightPx = 145,
                                             modifier = Modifier
                                                 .size(width = 112.dp, height = 66.dp)
                                                 .clip(RoundedCornerShape(8.dp))

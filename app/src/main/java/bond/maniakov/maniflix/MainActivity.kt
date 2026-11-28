@@ -78,6 +78,7 @@ import androidx.compose.ui.unit.sp
 import bond.maniakov.maniflix.BuildConfig
 import bond.maniakov.maniflix.data.AppPreferences
 import bond.maniakov.maniflix.data.AppState
+import bond.maniakov.maniflix.data.ManiFlixApi
 import bond.maniakov.maniflix.data.UpdateManager
 import bond.maniakov.maniflix.model.MovieItem
 import bond.maniakov.maniflix.player.ManiFlixPlayerScreen
@@ -85,6 +86,7 @@ import bond.maniakov.maniflix.player.OrientationHelper
 import bond.maniakov.maniflix.player.PlayerEngine
 import bond.maniakov.maniflix.player.PlayerSessionHolder
 import bond.maniakov.maniflix.ui.AuthSheetDialog
+import bond.maniakov.maniflix.ui.CachedPosterImage
 import bond.maniakov.maniflix.ui.DiscoverScreen
 import bond.maniakov.maniflix.ui.LibraryScreen
 import bond.maniakov.maniflix.ui.MovieDetailScreen
@@ -97,10 +99,8 @@ import bond.maniakov.maniflix.ui.theme.ManiFlixColors
 import bond.maniakov.maniflix.ui.theme.ManiFlixTheme
 import coil.Coil
 import coil.ImageLoader
-import coil.compose.AsyncImage
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
-import coil.request.ImageRequest
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -174,6 +174,7 @@ class MainActivity : ComponentActivity() {
         val am = appContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
         val isLowRamOrTv = am?.isLowRamDevice == true || BuildConfig.IS_TV_BUILD
         val loader = ImageLoader.Builder(appContext)
+            .okHttpClient { ManiFlixApi.sharedImageOkHttpClient }
             .memoryCache {
                 MemoryCache.Builder(appContext)
                     .maxSizePercent(0.22)
@@ -652,13 +653,12 @@ private fun MiniPlayerBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(engine.movie.displayPosterUrl.ifBlank { engine.movie.displayThumbUrl })
-                .crossfade(true)
-                .build(),
+        CachedPosterImage(
+            url = engine.movie.displayPosterUrl.ifBlank { engine.movie.displayThumbUrl },
             contentDescription = engine.movie.name,
             contentScale = ContentScale.Crop,
+            maxWidthPx = 120,
+            maxHeightPx = 120,
             modifier = Modifier
                 .size(40.dp)
                 .clip(RoundedCornerShape(8.dp))

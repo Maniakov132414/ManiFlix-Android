@@ -1,7 +1,9 @@
 package bond.maniakov.maniflix.ui
 
-import android.os.Build
+import android.graphics.BitmapFactory
+import android.util.LruCache
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,6 +37,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,11 +45,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
@@ -59,13 +63,145 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import bond.maniakov.maniflix.data.AppPreferences
 import bond.maniakov.maniflix.data.AppState
+import bond.maniakov.maniflix.data.ManiFlixApi
 import bond.maniakov.maniflix.data.SurfaceStyle
 import bond.maniakov.maniflix.model.MovieItem
 import bond.maniakov.maniflix.ui.theme.ManiFlixColors
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import coil.size.Precision
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import okhttp3.Request
+import java.util.concurrent.ConcurrentHashMap
+
+object PosterImageCache {
+    private const val MAX_CACHE_BYTES = 64 * 1024 * 1024
+    private val loaderScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val memoryCache = object : LruCache<String, ImageBitmap>(MAX_CACHE_BYTES) {
+        override fun sizeOf(key: String, value: ImageBitmap): Int {
+            return (value.width * value.height * 4).coerceAtLeast(1)
+        }
+    }
+    private val inflightLoads = ConcurrentHashMap<String, CompletableDeferred<ImageBitmap?>>()
+
+    private fun keyFor(url: String, maxWidthPx: Int, maxHeightPx: Int): String =
+        "$url#${maxWidthPx}x$maxHeightPx"
+
+    fun get(url: String, maxWidthPx: Int, maxHeightPx: Int): ImageBitmap? {
+        if (url.isBlank()) return null
+        return synchronized(memoryCache) { memoryCache.get(keyFor(url, maxWidthPx, maxHeightPx)) }
+    }
+
+    suspend fun load(url: String, maxWidthPx: Int, maxHeightPx: Int): ImageBitmap? {
+        if (url.isBlank()) return null
+        val key = keyFor(url, maxWidthPx, maxHeightPx)
+        get(url, maxWidthPx, maxHeightPx)?.let { return it }
+
+        inflightLoads[key]?.let { return it.await() }
+
+        val deferred = CompletableDeferred<ImageBitmap?>()
+        val existing = inflightLoads.putIfAbsent(key, deferred)
+        if (existing != null) {
+            return existing.await()
+        }
+
+        loaderScope.launch {
+            try {
+                val decoded = fetchAndDecode(url, maxWidthPx, maxHeightPx)
+                if (decoded != null) {
+                    synchronized(memoryCache) { memoryCache.put(key, decoded) }
+                }
+                deferred.complete(decoded)
+            } catch (_: Throwable) {
+                deferred.complete(null)
+            } finally {
+                inflightLoads.remove(key, deferred)
+            }
+        }
+
+        return deferred.await()
+    }
+
+    private fun fetchAndDecode(url: String, maxWidthPx: Int, maxHeightPx: Int): ImageBitmap? {
+        val req = Request.Builder()
+            .url(url)
+            .header("Accept", "image/webp,image/avif,image/*,*/*;q=0.8")
+            .get()
+            .build()
+        val bytes = ManiFlixApi.sharedImageOkHttpClient.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) return null
+            resp.body?.bytes()
+        } ?: return null
+        if (bytes.isEmpty()) return null
+
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+        var sampleSize = 1
+        while (bounds.outWidth / (sampleSize * 2) >= maxWidthPx &&
+            bounds.outHeight / (sampleSize * 2) >= maxHeightPx
+        ) {
+            sampleSize *= 2
+        }
+
+        val decodeOpts = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+        }
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOpts) ?: return null
+        return bitmap.asImageBitmap()
+    }
+}
+
+@Composable
+fun CachedPosterImage(
+    url: String?,
+    fallbackUrl: String? = null,
+    contentDescription: String?,
+    contentScale: ContentScale = ContentScale.Crop,
+    maxWidthPx: Int = 360,
+    maxHeightPx: Int = 540,
+    modifier: Modifier = Modifier
+) {
+    val primary = url?.trim().orEmpty()
+    val fallback = fallbackUrl?.trim().orEmpty()
+    val activePrimary = primary.ifBlank { fallback }
+    var useFallback by remember(activePrimary, fallback) { mutableStateOf(false) }
+    val resolvedUrl = if (useFallback && fallback.isNotBlank()) fallback else activePrimary
+
+    val syncHit = remember(resolvedUrl, maxWidthPx, maxHeightPx) {
+        PosterImageCache.get(resolvedUrl, maxWidthPx, maxHeightPx)
+    }
+    var loadedBitmap by remember(resolvedUrl, maxWidthPx, maxHeightPx) {
+        mutableStateOf(syncHit)
+    }
+
+    LaunchedEffect(resolvedUrl, maxWidthPx, maxHeightPx) {
+        if (loadedBitmap != null || resolvedUrl.isBlank()) return@LaunchedEffect
+        val fetched = PosterImageCache.load(resolvedUrl, maxWidthPx, maxHeightPx)
+        if (fetched != null) {
+            loadedBitmap = fetched
+        } else if (!useFallback && fallback.isNotBlank() && fallback != activePrimary) {
+            useFallback = true
+        }
+    }
+
+    val bmp = loadedBitmap ?: syncHit
+    if (bmp != null) {
+        Image(
+            bitmap = bmp,
+            contentDescription = contentDescription,
+            contentScale = contentScale,
+            modifier = modifier
+        )
+    } else {
+        Box(
+            modifier = modifier.background(ManiFlixColors.surfaceElevated())
+        )
+    }
+}
 
 fun triggerHaptic(haptic: HapticFeedback, strong: Boolean = false) {
     if (!AppPreferences.hapticsEnabled) return
@@ -199,23 +335,14 @@ fun MoviePosterCard(
         ) {
             val primaryUrl = movie.displayPosterUrl.ifBlank { movie.displayThumbUrl }
             val secondaryUrl = movie.displayThumbUrl.ifBlank { movie.displayPosterUrl }
-            var useFallbackUrl by remember(movie.slug) { mutableStateOf(false) }
-            val resolvedUrl = if (!useFallbackUrl) primaryUrl else secondaryUrl
 
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(resolvedUrl)
-                    .size(320, 480)
-                    .precision(Precision.INEXACT)
-                    .crossfade(true)
-                    .build(),
+            CachedPosterImage(
+                url = primaryUrl,
+                fallbackUrl = secondaryUrl,
                 contentDescription = movie.name,
                 contentScale = ContentScale.Crop,
-                onError = {
-                    if (!useFallbackUrl && secondaryUrl.isNotBlank() && secondaryUrl != primaryUrl) {
-                        useFallbackUrl = true
-                    }
-                },
+                maxWidthPx = 320,
+                maxHeightPx = 480,
                 modifier = Modifier.fillMaxSize()
             )
 

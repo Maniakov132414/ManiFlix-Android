@@ -23,6 +23,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.session.MediaSession
 import bond.maniakov.maniflix.data.AppPreferences
@@ -216,12 +217,14 @@ class PlayerEngine(
         .setAllowChunklessPreparation(true)
 
     private val fastLoadControl = DefaultLoadControl.Builder()
-        .setBufferDurationsMs(15_000, 45_000, 1_000, 2_000)
+        .setBufferDurationsMs(15_000, 45_000, 500, 1_000)
+        .setPrioritizeTimeOverSizeThresholds(true)
         .build()
 
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(appContext)
         .setLooper(Looper.getMainLooper())
         .setLoadControl(fastLoadControl)
+        .setSeekParameters(SeekParameters.CLOSEST_SYNC)
         .setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)

@@ -71,9 +71,8 @@ import bond.maniakov.maniflix.model.HistoryEntry
 import bond.maniakov.maniflix.model.MovieDetail
 import bond.maniakov.maniflix.model.MovieItem
 import bond.maniakov.maniflix.ui.theme.ManiFlixColors
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import coil.size.Precision
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -118,23 +117,30 @@ fun MovieDetailScreen(
             if (loadedMovie == null) {
                 errorMsg = "Không tìm thấy thông tin phim."
             } else {
-                franchiseSeasons = runCatching {
-                    ManiFlixApi.fetchFranchise(slug, loadedMovie.name)
-                }.getOrNull().orEmpty()
-
-                val firstCatSlug = loadedMovie.category.firstOrNull { it.slug.isNotBlank() }?.slug
-                val candidateList = runCatching {
-                    if (firstCatSlug != null) {
-                        ManiFlixApi.fetchCategory(firstCatSlug, 1)
-                    } else {
-                        ManiFlixApi.fetchMovies(1)
+                coroutineScope {
+                    val franchiseJob = async {
+                        runCatching {
+                            ManiFlixApi.fetchFranchise(slug, loadedMovie.name)
+                        }.getOrNull().orEmpty()
                     }
-                }.getOrNull().orEmpty().ifEmpty {
-                    runCatching { ManiFlixApi.fetchMovies(1) }.getOrNull().orEmpty()
+                    val relatedJob = async {
+                        val firstCatSlug = loadedMovie.category.firstOrNull { it.slug.isNotBlank() }?.slug
+                        val candidateList = runCatching {
+                            if (firstCatSlug != null) {
+                                ManiFlixApi.fetchCategory(firstCatSlug, 1)
+                            } else {
+                                ManiFlixApi.fetchMovies(1)
+                            }
+                        }.getOrNull().orEmpty().ifEmpty {
+                            runCatching { ManiFlixApi.fetchMovies(1) }.getOrNull().orEmpty()
+                        }
+                        candidateList
+                            .filter { it.slug != slug && !AppState.isBlocked(it.slug) }
+                            .take(12)
+                    }
+                    franchiseSeasons = franchiseJob.await()
+                    relatedMovies = relatedJob.await()
                 }
-                relatedMovies = candidateList
-                    .filter { it.slug != slug && !AppState.isBlocked(it.slug) }
-                    .take(12)
             }
         } catch (t: Throwable) {
             errorMsg = t.localizedMessage ?: "Không thể tải thông tin phim."
@@ -503,15 +509,12 @@ private fun DetailHeroHeader(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         val posterShape = RoundedCornerShape(12.dp)
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(heroArtworkUrl)
-                .size(320, 480)
-                .precision(Precision.INEXACT)
-                .crossfade(true)
-                .build(),
+        CachedPosterImage(
+            url = heroArtworkUrl,
             contentDescription = detail?.name ?: seedMovie?.name,
             contentScale = ContentScale.Crop,
+            maxWidthPx = 320,
+            maxHeightPx = 480,
             modifier = Modifier
                 .size(width = posterWidth, height = posterHeight)
                 .clip(posterShape)

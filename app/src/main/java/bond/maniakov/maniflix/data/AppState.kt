@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import bond.maniakov.maniflix.model.BlockedMovieRecord
+import bond.maniakov.maniflix.model.DiscoverBootstrapResult
 import bond.maniakov.maniflix.model.EpisodeServer
 import bond.maniakov.maniflix.model.FavoriteEntry
 import bond.maniakov.maniflix.model.HistoryEntry
@@ -69,6 +70,7 @@ object AppState {
     fun init(context: Context) {
         val appCtx = context.applicationContext
         appContext = appCtx
+        ManiFlixApi.init(appCtx)
         val sp = appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs = sp
         UpdateManager.init(appCtx)
@@ -78,6 +80,29 @@ object AppState {
         likedSlugs = sp.getStringSet(KEY_LIKED, emptySet())?.toSet() ?: emptySet()
         history = decodeHistory(sp.getString(KEY_LOCAL_HISTORY, null))
         favorites = decodeFavorites(sp.getString(KEY_LOCAL_FAVORITES, null))
+    }
+
+    suspend fun fetchBootstrapDiscover(forceRefresh: Boolean = false): DiscoverBootstrapResult {
+        val token = authToken.takeIf { it.isNotBlank() }
+        val result = ManiFlixApi.fetchBootstrapDiscover(token = token, forceRefresh = forceRefresh)
+        if (token != null) {
+            result.user?.let {
+                currentUser = it
+                syncThemeConfig(it.themeConfig)
+            }
+            result.history?.let {
+                history = it
+                persistLocalHistory()
+            }
+            result.favorites?.let {
+                favorites = it
+                persistLocalFavorites()
+            }
+            if (result.history != null || result.favorites != null) {
+                notifyWidget(force = false)
+            }
+        }
+        return result
     }
 
     fun requestImmediateWidgetRefresh() {

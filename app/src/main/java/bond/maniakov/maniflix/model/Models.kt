@@ -187,6 +187,17 @@ data class MovieDetailResult(
     val episodes: List<EpisodeServer> = emptyList()
 )
 
+data class DiscoverBootstrapResult(
+    val heroMovies: List<MovieItem> = emptyList(),
+    val seriesMovies: List<MovieItem> = emptyList(),
+    val singleMovies: List<MovieItem> = emptyList(),
+    val animeMovies: List<MovieItem> = emptyList(),
+    val user: UserInfo? = null,
+    val history: List<HistoryEntry>? = null,
+    val favorites: List<FavoriteEntry>? = null,
+    val fromBootstrapEndpoint: Boolean = false
+)
+
 data class FranchiseSeason(
     val sortIndex: Int = -1,
     val name: String = "",
