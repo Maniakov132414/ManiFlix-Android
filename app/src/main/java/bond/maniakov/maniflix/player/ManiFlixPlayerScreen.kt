@@ -889,7 +889,7 @@ fun ManiFlixPlayerScreen(
                                 verticalArrangement = Arrangement.spacedBy(1.dp)
                             ) {
                                 Text(
-                                    text = engine.movie.name,
+                                    text = engine.movie.localizedPrimaryTitle(bond.maniakov.maniflix.data.AppPreferences.uiLanguage),
                                     color = Color.White,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,

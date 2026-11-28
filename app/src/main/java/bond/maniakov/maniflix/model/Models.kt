@@ -1,5 +1,7 @@
 package bond.maniakov.maniflix.model
 
+import java.text.Normalizer
+
 object ImageUrlResolver {
     fun resolve(raw: String?): String {
         var trimmed = raw?.trim().orEmpty()
@@ -38,6 +40,9 @@ data class MovieItem(
     val quality: String = "",
     val lang: String = "",
     val subLangs: List<String> = emptyList(),
+    val viName: String = "",
+    val enName: String = "",
+    val romajiName: String = "",
     val episodeCurrent: String = "",
     val time: String = "",
     val category: List<MovieTag> = emptyList(),
@@ -48,6 +53,28 @@ data class MovieItem(
 
     val displayThumbUrl: String
         get() = ImageUrlResolver.resolve(thumbUrl.ifBlank { posterUrl })
+
+    fun localizedPrimaryTitle(uiLang: String): String =
+        TitleLocalizer.resolve(
+            uiLang = uiLang,
+            name = name,
+            originName = originName,
+            viName = viName,
+            enName = enName,
+            romajiName = romajiName,
+            slug = slug
+        ).first
+
+    fun localizedSecondaryTitle(uiLang: String): String =
+        TitleLocalizer.resolve(
+            uiLang = uiLang,
+            name = name,
+            originName = originName,
+            viName = viName,
+            enName = enName,
+            romajiName = romajiName,
+            slug = slug
+        ).second
 }
 
 data class MovieDetail(
@@ -67,6 +94,9 @@ data class MovieDetail(
     val quality: String = "",
     val lang: String = "",
     val subLangs: List<String> = emptyList(),
+    val viName: String = "",
+    val enName: String = "",
+    val romajiName: String = "",
     val year: Int = 0,
     val actor: List<String> = emptyList(),
     val director: List<String> = emptyList(),
@@ -78,6 +108,28 @@ data class MovieDetail(
 
     val displayThumbUrl: String
         get() = ImageUrlResolver.resolve(thumbUrl.ifBlank { posterUrl })
+
+    fun localizedPrimaryTitle(uiLang: String): String =
+        TitleLocalizer.resolve(
+            uiLang = uiLang,
+            name = name,
+            originName = originName,
+            viName = viName,
+            enName = enName,
+            romajiName = romajiName,
+            slug = slug
+        ).first
+
+    fun localizedSecondaryTitle(uiLang: String): String =
+        TitleLocalizer.resolve(
+            uiLang = uiLang,
+            name = name,
+            originName = originName,
+            viName = viName,
+            enName = enName,
+            romajiName = romajiName,
+            slug = slug
+        ).second
 
     val plainSynopsis: String
         get() = content
@@ -102,6 +154,9 @@ data class MovieDetail(
         quality = quality,
         lang = lang,
         subLangs = subLangs,
+        viName = viName,
+        enName = enName,
+        romajiName = romajiName,
         episodeCurrent = episodeCurrent,
         time = time,
         category = category,
@@ -133,7 +188,10 @@ data class MovieDetailResult(
 )
 
 data class FranchiseSeason(
+    val sortIndex: Int = -1,
     val name: String = "",
+    val nameVi: String = "",
+    val nameEn: String = "",
     val fullTitle: String = "",
     val originName: String = "",
     val slug: String = "",
@@ -143,18 +201,217 @@ data class FranchiseSeason(
     val quality: String = "",
     val lang: String = "",
     val isRecap: Boolean = false,
-    val episodeCurrent: String = ""
+    val episodeCurrent: String = "",
+    val baseTitle: String = "",
+    val baseTitleVi: String = "",
+    val baseTitleEn: String = "",
+    val baseTitleRomaji: String = ""
 ) {
     val displayPosterUrl: String
         get() = ImageUrlResolver.resolve(poster)
 
     val displayFullTitle: String
         get() {
-            val full = fullTitle.trim()
-            if (full.isNotEmpty()) return full
             val shortName = name.trim()
-            return if (shortName.isNotEmpty()) shortName else slug
+            if (shortName.isNotEmpty()) return shortName
+            val full = fullTitle.trim()
+            return if (full.isNotEmpty()) full else slug
         }
+
+    fun localizedLabel(uiLang: String, allSeasons: List<FranchiseSeason> = emptyList()): String {
+        val isEn = uiLang == "en"
+        val explicit = (if (isEn) nameEn.ifBlank { name } else nameVi.ifBlank { name }).trim()
+        val fallbackRaw = explicit.ifEmpty { fullTitle.trim().ifEmpty { slug } }
+        val hasSeason2 = allSeasons.any { it.seasonNumber >= 2 }
+        return TitleLocalizer.stripFranchisePrefix(
+            label = fallbackRaw,
+            uiLang = uiLang,
+            prefixes = listOf(baseTitleVi, baseTitleEn, baseTitleRomaji, baseTitle),
+            hasSeason2 = hasSeason2
+        )
+    }
+
+    companion object {
+        fun localizedHeader(uiLang: String, seasons: List<FranchiseSeason>): String {
+            val isEn = uiLang == "en"
+            val first = seasons.firstOrNull()
+            val cleanBase = if (isEn) {
+                first?.baseTitleEn?.trim().orEmpty().ifEmpty { first?.baseTitle?.trim().orEmpty() }
+            } else {
+                first?.baseTitleVi?.trim().orEmpty().ifEmpty { first?.baseTitle?.trim().orEmpty() }
+            }
+            val count = seasons.size
+            return if (cleanBase.isEmpty()) {
+                if (isEn) "Franchise ($count parts)" else "Các phần phim ($count)"
+            } else {
+                if (isEn) "Franchise: $cleanBase • $count parts" else "Các phần phim: $cleanBase • $count phần"
+            }
+        }
+    }
+}
+
+object TitleLocalizer {
+    private val VI_DIACRITICS_REGEX = Regex("[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]", RegexOption.IGNORE_CASE)
+    private val CJK_CHAR_REGEX = Regex("[\\u3040-\\u30ff\\u3400-\\u9fff\\uac00-\\ud7af]")
+    private val PURE_CJK_REGEX = Regex("^[\\u3040-\\u30ff\\u3400-\\u9fff\\uac00-\\ud7af\\s\\d:!\\-–·.,'()]+$")
+    private val ROMAJI_TOKEN_REGEX = Regex("\\b(no|wa|ga|wo|ni|kara|made|tachi|monogatari|kyoukai|kanata|shoujo|shounen|sekai|kimi|boku|ore|mahou|tensei|isekai|kuromukuro|shinonome|gekijou|saiban|kako|mirai|yaiba|kimetsu|shingeki|kyojin|jujutsu|kaisen|shippuuden|sousou|frieren|kusuriya|hitorigoto|dandadan)\\b", RegexOption.IGNORE_CASE)
+    private val SPLIT_DELIM_REGEX = Regex("\\s+(?:/|\\||•|;)\\s+")
+    private val COMBINING_MARKS_REGEX = Regex("\\p{InCombiningDiacriticalMarks}+")
+    private val NON_ALNUM_REGEX = Regex("[^a-zA-Z0-9]+")
+    private val PHAN_PREFIX_REGEX = Regex("^Phần\\s+(\\d+)", RegexOption.IGNORE_CASE)
+
+    fun hasViDiacritics(text: String): Boolean = VI_DIACRITICS_REGEX.containsMatchIn(text)
+
+    fun isPureCJK(text: String): Boolean {
+        val s = text.trim()
+        if (s.isEmpty()) return false
+        return CJK_CHAR_REGEX.containsMatchIn(s) && PURE_CJK_REGEX.matches(s)
+    }
+
+    fun looksRomaji(text: String): Boolean {
+        val s = text.trim()
+        if (s.isEmpty() || hasViDiacritics(s) || isPureCJK(s)) return false
+        return ROMAJI_TOKEN_REGEX.containsMatchIn(s)
+    }
+
+    fun splitCandidates(raw: String?): List<String> {
+        val s = raw?.trim().orEmpty()
+        if (s.isEmpty()) return emptyList()
+        return s.split(SPLIT_DELIM_REGEX).map { it.trim() }.filter { it.isNotEmpty() }
+    }
+
+    fun normKey(text: String): String {
+        val nfd = Normalizer.normalize(text, Normalizer.Form.NFD)
+        val stripped = COMBINING_MARKS_REGEX.replace(nfd, "")
+            .replace('đ', 'd')
+            .replace('Đ', 'd')
+        return NON_ALNUM_REGEX.replace(stripped, "").lowercase()
+    }
+
+    fun resolve(
+        uiLang: String,
+        name: String?,
+        originName: String?,
+        viName: String? = null,
+        enName: String? = null,
+        romajiName: String? = null,
+        slug: String = ""
+    ): Pair<String, String> {
+        val rawName = name?.trim().orEmpty()
+        val origParts = splitCandidates(originName)
+        val explicitVi = viName?.trim().orEmpty()
+        val explicitEn = enName?.trim().orEmpty()
+        val explicitRomaji = romajiName?.trim().orEmpty()
+
+        val viTitle = when {
+            explicitVi.isNotEmpty() -> explicitVi
+            hasViDiacritics(rawName) -> rawName
+            else -> origParts.firstOrNull { hasViDiacritics(it) }.orEmpty()
+        }
+
+        val romajiTitle = when {
+            explicitRomaji.isNotEmpty() -> explicitRomaji
+            looksRomaji(rawName) -> rawName
+            else -> origParts.firstOrNull { looksRomaji(it) }.orEmpty()
+        }
+
+        val allCands = (listOf(rawName) + origParts).filter { it.isNotEmpty() }
+        val enTitle = when {
+            explicitEn.isNotEmpty() && !isPureCJK(explicitEn) -> explicitEn
+            else -> allCands.firstOrNull { !hasViDiacritics(it) && !isPureCJK(it) && !looksRomaji(it) }
+                ?: romajiTitle
+        }
+
+        val safeFallback = (listOf(
+            enTitle,
+            romajiTitle,
+            viTitle,
+            if (isPureCJK(rawName)) "" else rawName
+        ) + origParts.filter { !isPureCJK(it) } + listOf(rawName, slug)).firstOrNull { it.isNotEmpty() } ?: slug
+
+        val isEn = uiLang == "en"
+        val primary: String
+        val secCandidates: List<String>
+
+        if (isEn) {
+            primary = enTitle.ifEmpty { romajiTitle.ifEmpty { safeFallback } }
+            secCandidates = listOf(romajiTitle, viTitle) + origParts + listOf(rawName)
+        } else {
+            if (viTitle.isNotEmpty()) {
+                primary = viTitle
+                secCandidates = listOf(enTitle, romajiTitle) + origParts + listOf(rawName)
+            } else {
+                primary = enTitle.ifEmpty { romajiTitle.ifEmpty { safeFallback } }
+                secCandidates = listOf(romajiTitle) + origParts + listOf(rawName)
+            }
+        }
+
+        val seen = HashSet<String>()
+        seen.add(normKey(primary))
+        val picked = ArrayList<String>(2)
+        for (cand in secCandidates) {
+            val trimmed = cand.trim()
+            if (trimmed.isEmpty() || isPureCJK(trimmed)) continue
+            val k = normKey(trimmed)
+            if (k.isEmpty() || !seen.add(k)) continue
+            picked.add(trimmed)
+            if (picked.size >= 2) break
+        }
+        return primary to picked.joinToString(" • ")
+    }
+
+    fun stripFranchisePrefix(
+        label: String,
+        uiLang: String,
+        prefixes: List<String>,
+        hasSeason2: Boolean
+    ): String {
+        val trimmed = label.trim()
+        if (trimmed.isEmpty()) {
+            return if (hasSeason2) (if (uiLang == "en") "Season 1" else "Phần 1") else "TV Series"
+        }
+        val sortedPrefixes = prefixes
+            .map { it.trim() }
+            .filter { it.length >= 3 }
+            .sortedByDescending { it.length }
+
+        for (prefix in sortedPrefixes) {
+            if (trimmed.startsWith(prefix, ignoreCase = true)) {
+                var rest = trimmed.substring(prefix.length).trim()
+                while (rest.isNotEmpty() && rest.first() in charArrayOf(':', '-', '–', '—', '·', '|', '/')) {
+                    rest = rest.drop(1).trim()
+                }
+                if (rest.isEmpty()) {
+                    return if (hasSeason2) (if (uiLang == "en") "Season 1" else "Phần 1") else "TV Series"
+                }
+                if (uiLang == "en") {
+                    rest = PHAN_PREFIX_REGEX.replace(rest, "Season $1")
+                }
+                return rest
+            }
+        }
+        return trimmed
+    }
+
+    fun sortFranchiseSeasons(seasons: List<FranchiseSeason>, baseTitle: String?): List<FranchiseSeason> {
+        if (seasons.size <= 1) return seasons
+        if (seasons.any { it.sortIndex >= 0 }) {
+            return seasons.withIndex().sortedWith(
+                compareBy<IndexedValue<FranchiseSeason>> { if (it.value.sortIndex >= 0) it.value.sortIndex else (1000 + it.index) }
+                    .thenBy { it.index }
+            ).map { it.value }
+        }
+        val baseNorm = normKey(baseTitle.orEmpty())
+        return seasons.withIndex().sortedWith { a, b ->
+            val ay = if (a.value.year > 0) a.value.year else 9999
+            val by = if (b.value.year > 0) b.value.year else 9999
+            if (ay != by) return@sortedWith ay.compareTo(by)
+            val aRoot = baseNorm.isNotEmpty() && (normKey(a.value.fullTitle) == baseNorm || a.value.name == "TV Series")
+            val bRoot = baseNorm.isNotEmpty() && (normKey(b.value.fullTitle) == baseNorm || b.value.name == "TV Series")
+            if (aRoot != bRoot) return@sortedWith if (aRoot) -1 else 1
+            a.index.compareTo(b.index)
+        }.map { it.value }
+    }
 }
 
 data class AdMarker(

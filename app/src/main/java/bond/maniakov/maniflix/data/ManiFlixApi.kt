@@ -13,6 +13,7 @@ import bond.maniakov.maniflix.model.MovieDetail
 import bond.maniakov.maniflix.model.MovieDetailResult
 import bond.maniakov.maniflix.model.MovieItem
 import bond.maniakov.maniflix.model.MovieTag
+import bond.maniakov.maniflix.model.TitleLocalizer
 import bond.maniakov.maniflix.model.UserInfo
 import bond.maniakov.maniflix.model.UserThemeConfig
 import kotlinx.coroutines.Dispatchers
@@ -298,6 +299,10 @@ object ManiFlixApi {
             sb.append("&title=${encodeQuery(title)}")
         }
         val obj = requestJsonObject(sb.toString())
+        val baseTitle = obj.optString("baseTitle", "")
+        val baseTitleVi = obj.optString("baseTitleVi", "")
+        val baseTitleEn = obj.optString("baseTitleEn", "")
+        val baseTitleRomaji = obj.optString("baseTitleRomaji", "")
         val arr = obj.optJSONArray("seasons") ?: return emptyList()
         val result = ArrayList<FranchiseSeason>(arr.length())
         for (i in 0 until arr.length()) {
@@ -306,7 +311,10 @@ object ManiFlixApi {
             if (sSlug.isEmpty()) continue
             result.add(
                 FranchiseSeason(
+                    sortIndex = parseFlexInt(s.opt("sortIndex"), -1),
                     name = s.optString("name", ""),
+                    nameVi = s.optString("nameVi", ""),
+                    nameEn = s.optString("nameEn", ""),
                     fullTitle = s.optString("fullTitle", ""),
                     originName = s.optString("originName", ""),
                     slug = sSlug,
@@ -316,11 +324,15 @@ object ManiFlixApi {
                     quality = s.optString("quality", ""),
                     lang = s.optString("lang", ""),
                     isRecap = s.optBoolean("isRecap", false),
-                    episodeCurrent = s.optString("episodeCurrent", "")
+                    episodeCurrent = s.optString("episodeCurrent", ""),
+                    baseTitle = baseTitle,
+                    baseTitleVi = baseTitleVi,
+                    baseTitleEn = baseTitleEn,
+                    baseTitleRomaji = baseTitleRomaji
                 )
             )
         }
-        return result
+        return TitleLocalizer.sortFranchiseSeasons(result, baseTitle)
     }
 
     suspend fun fetchAdsMarkers(slug: String, ep: String, titleHint: String = ""): List<AdMarker> {
@@ -583,6 +595,9 @@ object ManiFlixApi {
                     quality = m.optString("quality", ""),
                     lang = m.optString("lang", ""),
                     subLangs = parseStringList(m.opt("sub_langs")),
+                    viName = m.optString("vi_name", ""),
+                    enName = m.optString("en_name", ""),
+                    romajiName = m.optString("romaji_name", ""),
                     episodeCurrent = m.optString("episode_current", ""),
                     time = m.optString("time", ""),
                     category = parseTagList(m.optJSONArray("category")),
@@ -612,6 +627,9 @@ object ManiFlixApi {
             quality = m.optString("quality", ""),
             lang = m.optString("lang", ""),
             subLangs = parseStringList(m.opt("sub_langs")),
+            viName = m.optString("vi_name", ""),
+            enName = m.optString("en_name", ""),
+            romajiName = m.optString("romaji_name", ""),
             year = parseFlexInt(m.opt("year")),
             actor = parseStringList(m.opt("actor")),
             director = parseStringList(m.opt("director")),

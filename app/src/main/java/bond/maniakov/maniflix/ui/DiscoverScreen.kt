@@ -708,8 +708,9 @@ private fun HeroFeaturedCard(
                 }
             }
 
+            val uiLang = AppPreferences.uiLanguage
             Text(
-                text = movie.name,
+                text = movie.localizedPrimaryTitle(uiLang),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
@@ -717,7 +718,7 @@ private fun HeroFeaturedCard(
                 overflow = TextOverflow.Ellipsis
             )
 
-            movie.originName.takeIf { it.isNotBlank() }?.let { origin ->
+            movie.localizedSecondaryTitle(uiLang).takeIf { it.isNotBlank() }?.let { origin ->
                 Text(
                     text = origin,
                     fontSize = 12.sp,

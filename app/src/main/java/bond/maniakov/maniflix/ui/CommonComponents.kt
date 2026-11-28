@@ -250,7 +250,7 @@ fun MoviePosterCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = movie.name,
+                text = movie.localizedPrimaryTitle(AppPreferences.uiLanguage),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 color = primaryText,

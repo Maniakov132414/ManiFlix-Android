@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import bond.maniakov.maniflix.data.AppPreferences
 import bond.maniakov.maniflix.data.AppState
 import bond.maniakov.maniflix.data.ManiFlixApi
 import bond.maniakov.maniflix.model.EpisodeServer
@@ -520,8 +521,9 @@ private fun DetailHeroHeader(
 
         Spacer(modifier = Modifier.height(14.dp))
 
+        val uiLang = AppPreferences.uiLanguage
         Text(
-            text = detail?.name ?: seedMovie?.name ?: "",
+            text = detail?.localizedPrimaryTitle(uiLang) ?: seedMovie?.localizedPrimaryTitle(uiLang) ?: "",
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             color = textPrimary,
@@ -531,8 +533,8 @@ private fun DetailHeroHeader(
             modifier = Modifier.padding(horizontal = 12.dp)
         )
 
-        val originName = detail?.originName?.takeIf { it.isNotBlank() }
-            ?: seedMovie?.originName?.takeIf { it.isNotBlank() }
+        val originName = detail?.localizedSecondaryTitle(uiLang)?.takeIf { it.isNotBlank() }
+            ?: seedMovie?.localizedSecondaryTitle(uiLang)?.takeIf { it.isNotBlank() }
         if (!originName.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -706,6 +708,7 @@ private fun DetailFranchiseSection(
     onSelectSeason: (String) -> Unit
 ) {
     if (franchiseSeasons.size <= 1) return
+    val uiLang = AppPreferences.uiLanguage
 
     Column(
         modifier = Modifier
@@ -722,7 +725,7 @@ private fun DetailFranchiseSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Các phần phim (${franchiseSeasons.size})",
+                text = FranchiseSeason.localizedHeader(uiLang, franchiseSeasons),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = textPrimary,
@@ -732,7 +735,7 @@ private fun DetailFranchiseSection(
             )
 
             Text(
-                text = if (isFranchiseExpanded) "Thu gọn" else "Mở rộng",
+                text = if (isFranchiseExpanded) AppPreferences.tr("Thu gọn", "Collapse") else AppPreferences.tr("Mở rộng", "Expand"),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = textSecondary
@@ -773,7 +776,7 @@ private fun DetailFranchiseSection(
                             .padding(horizontal = 12.dp, vertical = 8.dp)
                     ) {
                         Text(
-                            text = season.displayFullTitle,
+                            text = season.localizedLabel(uiLang, franchiseSeasons),
                             fontSize = 12.5.sp,
                             fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Medium,
                             color = if (isCurrent && isLight) accent else textPrimary

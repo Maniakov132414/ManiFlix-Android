@@ -581,7 +581,7 @@ private fun TvMovieCard(
         }
 
         Text(
-            text = movie.name,
+            text = movie.localizedPrimaryTitle(AppPreferences.uiLanguage),
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
             color = textPrimary,
@@ -982,8 +982,9 @@ private fun TvSpotlightBanner(
                 )
             }
 
+            val uiLang = AppPreferences.uiLanguage
             Text(
-                text = movie.name,
+                text = movie.localizedPrimaryTitle(uiLang),
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
@@ -991,9 +992,10 @@ private fun TvSpotlightBanner(
                 overflow = TextOverflow.Ellipsis
             )
 
-            if (movie.originName.isNotBlank()) {
+            val secTitle = movie.localizedSecondaryTitle(uiLang)
+            if (secTitle.isNotBlank()) {
                 Text(
-                    text = movie.originName,
+                    text = secTitle,
                     fontSize = 13.sp,
                     color = Color.White.copy(alpha = 0.72f),
                     maxLines = 1,
@@ -1364,7 +1366,8 @@ private fun TvMovieDetailPane(
     val activeEpisodes = servers.getOrNull(selectedServerIdx)?.serverData.orEmpty()
     val posterUrl = detail?.displayPosterUrl?.ifBlank { detail?.displayThumbUrl.orEmpty() }
         ?: seedMovie?.displayPosterUrl?.ifBlank { seedMovie.displayThumbUrl }.orEmpty()
-    val title = detail?.name ?: seedMovie?.name ?: slug
+    val uiLang = AppPreferences.uiLanguage
+    val title = detail?.localizedPrimaryTitle(uiLang) ?: seedMovie?.localizedPrimaryTitle(uiLang) ?: slug
     val isFav = AppState.isFavorite(slug)
 
     Column(
@@ -1426,7 +1429,8 @@ private fun TvMovieDetailPane(
                     color = textPrimary
                 )
 
-                val origin = detail?.originName ?: seedMovie?.originName.orEmpty()
+                val origin = detail?.localizedSecondaryTitle(uiLang)?.takeIf { it.isNotBlank() }
+                    ?: seedMovie?.localizedSecondaryTitle(uiLang).orEmpty()
                 if (origin.isNotBlank()) {
                     Text(text = origin, fontSize = 14.sp, color = textSecondary)
                 }
@@ -1515,7 +1519,7 @@ private fun TvMovieDetailPane(
 
         if (franchise.size > 1) {
             Text(
-                text = "Các phần phim (${franchise.size})",
+                text = FranchiseSeason.localizedHeader(uiLang, franchise),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 color = textPrimary
@@ -1526,7 +1530,7 @@ private fun TvMovieDetailPane(
             ) {
                 franchise.forEach { season ->
                     TvActionPill(
-                        label = season.displayFullTitle,
+                        label = season.localizedLabel(uiLang, franchise),
                         selected = season.slug == slug,
                         onClick = {
                             if (season.slug != slug) {
