@@ -190,6 +190,7 @@ class PlayerEngine(
     private var pendingResumeSeconds: Double = initialResumeSeconds
     private var usingCleanSource = true
     private var didFailoverThisEpisode = false
+    private val triedServerIndices = mutableSetOf<Int>()
     private var lastSavedProgressTimestamp = -999.0
     private var lastPlayPosSec = 0.0
     private var isTempBoostActive = false
@@ -380,12 +381,17 @@ class PlayerEngine(
             }
         }
 
-    fun loadCurrentEpisode() {
+    fun loadCurrentEpisode(resetFailover: Boolean = true) {
         if (isShutDown) return
         watchdogJob?.cancel()
         adsFetchJob?.cancel()
         promptAutoHideJob?.cancel()
         undoClearJob?.cancel()
+
+        if (resetFailover) {
+            triedServerIndices.clear()
+            triedServerIndices.add(serverIndex)
+        }
 
         isFailed = false
         errorMessage = ""
@@ -434,9 +440,8 @@ class PlayerEngine(
     private fun startPlaybackStream(ep: EpisodeItem, useClean: Boolean) {
         val rawM3u8 = ep.linkM3u8.trim()
         if (rawM3u8.isEmpty()) {
-            isFailed = true
-            isBuffering = false
-            errorMessage = "Tập này chưa có luồng phát HLS."
+            didFailoverThisEpisode = true
+            tryFailoverStream(ep, "Tập này chưa có luồng phát HLS.")
             return
         }
 
@@ -454,9 +459,8 @@ class PlayerEngine(
 
         val uri = runCatching { Uri.parse(resolvedUrl) }.getOrNull()
         if (uri == null || resolvedUrl.isBlank()) {
-            isFailed = true
-            isBuffering = false
-            errorMessage = "Địa chỉ luồng phát không hợp lệ."
+            didFailoverThisEpisode = true
+            tryFailoverStream(ep, "Địa chỉ luồng phát không hợp lệ.")
             return
         }
 
@@ -503,23 +507,47 @@ class PlayerEngine(
         watchdogJob?.cancel()
         watchdogJob = scope.launch {
             delay(18_000L)
-            if (!isShutDown && isBuffering && currentTime < 0.5 && !didFailoverThisEpisode) {
+            if (!isShutDown && isBuffering && currentTime < 0.5) {
                 tryFailoverStream(ep, "Đang đổi sang nguồn dự phòng...")
             }
         }
     }
 
     private fun tryFailoverStream(ep: EpisodeItem, reason: String) {
-        if (didFailoverThisEpisode) {
-            isFailed = true
-            isBuffering = false
-            errorMessage = reason
+        triedServerIndices.add(serverIndex)
+        val rawM3u8 = ep.linkM3u8.trim()
+        if (!didFailoverThisEpisode && !rawM3u8.contains("/api/")) {
+            didFailoverThisEpisode = true
+            usingCleanSource = !usingCleanSource
+            showToast(if (usingCleanSource) "Đổi sang nguồn lọc quảng cáo" else "Đổi sang nguồn gốc")
+            startPlaybackStream(ep, useClean = usingCleanSource)
             return
         }
-        didFailoverThisEpisode = true
-        usingCleanSource = !usingCleanSource
-        showToast(if (usingCleanSource) "Đổi sang nguồn lọc quảng cáo" else "Đổi sang nguồn gốc")
-        startPlaybackStream(ep, useClean = usingCleanSource)
+
+        val targetSlug = ep.slug.trim()
+        for (nextIdx in servers.indices) {
+            if (triedServerIndices.contains(nextIdx)) continue
+            val candidateList = servers[nextIdx].serverData
+            if (candidateList.isEmpty()) continue
+            val matchedIdx = if (targetSlug.isNotEmpty()) {
+                candidateList.indexOfFirst { it.slug.trim() == targetSlug }
+            } else {
+                -1
+            }
+            val nextEpIdx = if (matchedIdx >= 0) matchedIdx else episodeIndex.coerceIn(0, candidateList.lastIndex)
+            triedServerIndices.add(nextIdx)
+            serverIndex = nextIdx
+            episodeIndex = nextEpIdx
+            didFailoverThisEpisode = false
+            usingCleanSource = true
+            showToast("Đang chuyển sang ${servers[nextIdx].serverName}...")
+            startPlaybackStream(candidateList[nextEpIdx], useClean = true)
+            return
+        }
+
+        isFailed = true
+        isBuffering = false
+        errorMessage = reason
     }
 
     private fun startTicker() {
@@ -771,7 +799,13 @@ class PlayerEngine(
         serverIndex = serverIdx
         episodeIndex = epIdx
         pendingResumeSeconds = AppState.savedResumeTime(movie.slug, epIdx)
-        loadCurrentEpisode()
+        loadCurrentEpisode(resetFailover = true)
+    }
+
+    fun selectServer(serverIdx: Int) {
+        val srv = servers.getOrNull(serverIdx) ?: return
+        if (srv.serverData.isEmpty()) return
+        selectEpisode(serverIdx, episodeIndex.coerceIn(0, srv.serverData.lastIndex))
     }
 
     fun previousEpisode() {

@@ -58,7 +58,7 @@ object ManiFlixApi {
     private const val READ_TIMEOUT_SEC = 18L
     private const val WRITE_TIMEOUT_SEC = 18L
     private const val DISK_CACHE_BYTES = 64L * 1024L * 1024L
-    private const val USER_AGENT = "ManiFlix-Android/2.0.2"
+    private const val USER_AGENT = "ManiFlix-Android/2.0.3"
 
     private const val CF_PING_URL = "https://speed.cloudflare.com/__down?bytes=0"
     private const val CF_DOWN_5MB_URL = "https://speed.cloudflare.com/__down?bytes=5000000"
