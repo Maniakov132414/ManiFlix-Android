@@ -152,6 +152,7 @@ class PlayerEngine(
     var flipVertical by mutableStateOf(false)
     var availableSubtitles by mutableStateOf<List<SubtitleTrackOption>>(emptyList())
     var selectedSubtitleId by mutableStateOf("off")
+    var hasEngSub by mutableStateOf(false)
 
     val currentSubtitleShortLabel: String
         get() {
@@ -307,6 +308,9 @@ class PlayerEngine(
             }
             val viEn = found.filter { it.label == "Tiếng Việt" || it.label == "English" }
             availableSubtitles = if (viEn.isNotEmpty()) viEn else found
+            val allViOnly = found.isNotEmpty() && found.all { it.label == "Tiếng Việt" }
+            hasEngSub = found.any { it.label == "English" } ||
+                (!allViOnly && found.isNotEmpty() && movie.subLangs.any { it.lowercase().startsWith("en") })
             val disabled = exoPlayer.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
             selectedSubtitleId = if (disabled || activeId == null) "off" else activeId!!
         }
@@ -395,6 +399,9 @@ class PlayerEngine(
         userSeekedInsideAdIds.clear()
         lastPlayPosSec = 0.0
         didFailoverThisEpisode = false
+        availableSubtitles = emptyList()
+        selectedSubtitleId = "off"
+        hasEngSub = false
 
         val ep = currentEpisode
         if (ep == null) {
@@ -567,7 +574,7 @@ class PlayerEngine(
                     if (atEntry || crossedStart) {
                         skippedCutIds.add(marker.id)
                         lastPlayPosSec = endSec + 0.1
-                        seek(endSec + 0.1)
+                        seek(endSec + 0.1, programmatic = true)
                         showToast("Đã bỏ qua quảng cáo")
                         return
                     }
@@ -583,11 +590,11 @@ class PlayerEngine(
                 val mode = resolveMarkerMode(marker)
                 if (mode != "skip" || marker.type == "outro") continue
                 val endSec = effectiveEnd(marker)
-                if (sec >= marker.start && sec < endSec - 0.5) {
+                if (sec >= marker.start && sec < endSec) {
                     if (skipBehavior == IntroSkipBehavior.AUTO && !skippedCutIds.contains(marker.id)) {
                         skippedCutIds.add(marker.id)
                         recordUndoAnchor(sec)
-                        seek(endSec + 0.1)
+                        seek(endSec + 0.1, programmatic = true)
                         return
                     } else if (!dismissedSkipIds.contains(marker.id) && !skippedCutIds.contains(marker.id)) {
                         foundIntro = marker
@@ -599,14 +606,9 @@ class PlayerEngine(
             }
         }
 
-        if (foundIntro != null) {
-            if (!shownPromptIds.contains(foundIntro.id)) {
-                shownPromptIds.add(foundIntro.id)
-                activeSkipPrompt = foundIntro
-                scheduleIntroPromptAutoHide(foundIntro.id)
-            }
-        } else if (activeSkipPrompt != null) {
-            activeSkipPrompt = null
+        promptAutoHideJob?.cancel()
+        if (activeSkipPrompt?.id != foundIntro?.id) {
+            activeSkipPrompt = foundIntro
         }
 
         var foundOutro: AdMarker? = null
@@ -682,11 +684,22 @@ class PlayerEngine(
         }
     }
 
-    fun seek(seconds: Double) {
+    fun seek(seconds: Double, programmatic: Boolean = false) {
         val upper = if (duration > 0.0) duration else seconds
         val clamped = max(0.0, min(seconds, upper))
         exoPlayer.seekTo((clamped * 1000.0).toLong())
         currentTime = clamped
+        if (!programmatic) {
+            for (marker in filteredTimelineMarkers) {
+                val mode = resolveMarkerMode(marker)
+                val endSec = effectiveEnd(marker)
+                if (mode == "skip" && clamped >= marker.start && clamped < endSec) {
+                    skippedCutIds.remove(marker.id)
+                    dismissedSkipIds.remove(marker.id)
+                }
+            }
+            evaluateAdAndIntroMarkers(clamped)
+        }
     }
 
     fun seekRelative(delta: Double) {
@@ -725,7 +738,7 @@ class PlayerEngine(
         skippedCutIds.add(marker.id)
         activeSkipPrompt = null
         recordUndoAnchor(currentTime)
-        seek(endSec + 0.1)
+        seek(endSec + 0.1, programmatic = true)
     }
 
     fun dismissSkipPrompt() {

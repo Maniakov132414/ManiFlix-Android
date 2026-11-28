@@ -253,6 +253,12 @@ fun ManiFlixPlayerScreen(
         }
     }
 
+    LaunchedEffect(engine.hasEngSub) {
+        if (!engine.hasEngSub && showSubtitleDrawer) {
+            showSubtitleDrawer = false
+        }
+    }
+
     LaunchedEffect(isInPiP, showControls, showEpisodeDrawer, showAudioDrawer, showSubtitleDrawer) {
         if (!isInPiP && !showEpisodeDrawer && !showAudioDrawer && !showSubtitleDrawer) {
             if (showControls && isTvMode && !isLocked) {
@@ -335,7 +341,7 @@ fun ManiFlixPlayerScreen(
                         true
                     }
                     AndroidKeyEvent.KEYCODE_CAPTIONS -> {
-                        if (!isLocked) {
+                        if (!isLocked && engine.hasEngSub) {
                             showControls = true
                             showSubtitleDrawer = !showSubtitleDrawer
                             bumpAutoHide()
@@ -1132,31 +1138,33 @@ fun ManiFlixPlayerScreen(
 
                                 Spacer(Modifier.weight(1f))
 
-                                GlassPill(
-                                    clickable = true,
-                                    horizontalPadding = 9.dp,
-                                    onClick = {
-                                        bumpAutoHide()
-                                        triggerHaptic()
-                                        showSubtitleDrawer = true
+                                if (engine.hasEngSub) {
+                                    GlassPill(
+                                        clickable = true,
+                                        horizontalPadding = 9.dp,
+                                        onClick = {
+                                            bumpAutoHide()
+                                            triggerHaptic()
+                                            showSubtitleDrawer = true
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Subtitles,
+                                            contentDescription = "Phụ đề",
+                                            tint = if (engine.selectedSubtitleId != "off") accentColor else Color.White,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = engine.currentSubtitleShortLabel,
+                                            color = Color.White,
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Subtitles,
-                                        contentDescription = "Phụ đề",
-                                        tint = if (engine.selectedSubtitleId != "off") accentColor else Color.White,
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        text = engine.currentSubtitleShortLabel,
-                                        color = Color.White,
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
                                 }
 
                                 GlassPill(
